@@ -496,21 +496,23 @@ export class QuickNotesBoardSettingTab extends PluginSettingTab {
 				row.settingEl.addEventListener("dragleave", () => {
 					row.settingEl.removeClass("qnb-drag-over");
 				});
-				row.settingEl.addEventListener("drop", async (evt) => {
-					evt.preventDefault();
-					row.settingEl.removeClass("qnb-drag-over");
-					const draggedId = this.draggedNoteIconId;
-					this.draggedNoteIconId = null;
-					if (!draggedId || draggedId === cfg.id) return;
+				row.settingEl.addEventListener("drop", (evt) => {
+					void (async () => {
+						evt.preventDefault();
+						row.settingEl.removeClass("qnb-drag-over");
+						const draggedId = this.draggedNoteIconId;
+						this.draggedNoteIconId = null;
+						if (!draggedId || draggedId === cfg.id) return;
 
-					const newOrder = [...this.plugin.settings.noteIconOrder];
-					const fromIdx = newOrder.findIndex((c) => c.id === draggedId);
-					if (fromIdx === -1) return;
-					const [moved] = newOrder.splice(fromIdx, 1);
-					const toIdx = newOrder.findIndex((c) => c.id === cfg.id);
-					newOrder.splice(toIdx === -1 ? idx : toIdx, 0, moved);
-					await this.plugin.setNoteIconOrder(newOrder);
-					renderIconList();
+						const newOrder = [...this.plugin.settings.noteIconOrder];
+						const fromIdx = newOrder.findIndex((c) => c.id === draggedId);
+						if (fromIdx === -1) return;
+						const [moved] = newOrder.splice(fromIdx, 1);
+						const toIdx = newOrder.findIndex((c) => c.id === cfg.id);
+						newOrder.splice(toIdx === -1 ? idx : toIdx, 0, moved);
+						await this.plugin.setNoteIconOrder(newOrder);
+						renderIconList();
+					})();
 				});
 
 				row.addToggle((toggle) =>
@@ -562,21 +564,23 @@ export class QuickNotesBoardSettingTab extends PluginSettingTab {
 				row.settingEl.addEventListener("dragleave", () => {
 					row.settingEl.removeClass("qnb-drag-over");
 				});
-				row.settingEl.addEventListener("drop", async (evt) => {
-					evt.preventDefault();
-					row.settingEl.removeClass("qnb-drag-over");
-					const fromId = draggedLabelId;
-					draggedLabelId = null;
-					if (!fromId || fromId === label.id) return;
+				row.settingEl.addEventListener("drop", (evt) => {
+					void (async () => {
+						evt.preventDefault();
+						row.settingEl.removeClass("qnb-drag-over");
+						const fromId = draggedLabelId;
+						draggedLabelId = null;
+						if (!fromId || fromId === label.id) return;
 
-					const current = [...this.plugin.settings.labels];
-					const fromIdx = current.findIndex((l) => l.id === fromId);
-					if (fromIdx === -1) return;
-					const [moved] = current.splice(fromIdx, 1);
-					const toIdx = current.findIndex((l) => l.id === label.id);
-					current.splice(toIdx === -1 ? current.length : toIdx, 0, moved);
-					await this.plugin.setLabels(current);
-					renderLabelsList();
+						const current = [...this.plugin.settings.labels];
+						const fromIdx = current.findIndex((l) => l.id === fromId);
+						if (fromIdx === -1) return;
+						const [moved] = current.splice(fromIdx, 1);
+						const toIdx = current.findIndex((l) => l.id === label.id);
+						current.splice(toIdx === -1 ? current.length : toIdx, 0, moved);
+						await this.plugin.setLabels(current);
+						renderLabelsList();
+					})();
 				});
 
 				row.addColorPicker((cp) =>
@@ -891,20 +895,24 @@ export class QuickNotesBoardSettingTab extends PluginSettingTab {
 				text.inputEl.type = "number";
 				text.inputEl.min = String(MIN_NOTE_W);
 				text.setValue(String(this.plugin.settings.defaultNoteWidth));
-				text.inputEl.addEventListener("change", async () => {
-					const value = Math.max(MIN_NOTE_W, parseInt(text.inputEl.value, 10) || MIN_NOTE_W);
-					text.setValue(String(value));
-					await this.plugin.setDefaultNoteSize(value, this.plugin.settings.defaultNoteHeight);
+				text.inputEl.addEventListener("change", () => {
+					void (async () => {
+						const value = Math.max(MIN_NOTE_W, parseInt(text.inputEl.value, 10) || MIN_NOTE_W);
+						text.setValue(String(value));
+						await this.plugin.setDefaultNoteSize(value, this.plugin.settings.defaultNoteHeight);
+					})();
 				});
 			})
 			.addText((text) => {
 				text.inputEl.type = "number";
 				text.inputEl.min = String(MIN_NOTE_H);
 				text.setValue(String(this.plugin.settings.defaultNoteHeight));
-				text.inputEl.addEventListener("change", async () => {
-					const value = Math.max(MIN_NOTE_H, parseInt(text.inputEl.value, 10) || MIN_NOTE_H);
-					text.setValue(String(value));
-					await this.plugin.setDefaultNoteSize(this.plugin.settings.defaultNoteWidth, value);
+				text.inputEl.addEventListener("change", () => {
+					void (async () => {
+						const value = Math.max(MIN_NOTE_H, parseInt(text.inputEl.value, 10) || MIN_NOTE_H);
+						text.setValue(String(value));
+						await this.plugin.setDefaultNoteSize(this.plugin.settings.defaultNoteWidth, value);
+					})();
 				});
 			});
 
@@ -1009,25 +1017,29 @@ export class QuickNotesBoardSettingTab extends PluginSettingTab {
 				card.addEventListener("dragleave", () => {
 					card.removeClass("qnb-drag-over");
 				});
-				card.addEventListener("drop", async (evt) => {
-					evt.preventDefault();
-					card.removeClass("qnb-drag-over");
-					const fromIndex = this.draggedCategoryIndex;
-					this.draggedCategoryIndex = null;
-					if (fromIndex === null || fromIndex === index) return;
-					await this.plugin.reorderCategories(fromIndex, index);
-					render();
+				card.addEventListener("drop", (evt) => {
+					void (async () => {
+						evt.preventDefault();
+						card.removeClass("qnb-drag-over");
+						const fromIndex = this.draggedCategoryIndex;
+						this.draggedCategoryIndex = null;
+						if (fromIndex === null || fromIndex === index) return;
+						await this.plugin.reorderCategories(fromIndex, index);
+						render();
+					})();
 				});
 
 				header.addText((text) => {
 					text.setValue(cat.name);
 					text.onChange((v) => (pendingName = v));
-					text.inputEl.addEventListener("blur", async () => {
-						const trimmed = pendingName.trim();
-						if (trimmed && trimmed !== cat.name) {
-							await this.plugin.renameCategory(cat.name, trimmed);
-							render();
-						}
+					text.inputEl.addEventListener("blur", () => {
+						void (async () => {
+							const trimmed = pendingName.trim();
+							if (trimmed && trimmed !== cat.name) {
+								await this.plugin.renameCategory(cat.name, trimmed);
+								render();
+							}
+						})();
 					});
 				});
 
@@ -1198,14 +1210,16 @@ export class QuickNotesBoardSettingTab extends PluginSettingTab {
 			btn.setAttr("aria-label", this.tr(opt.labelKey));
 			if ((cat.icon || "") === opt.value) btn.addClass("is-selected");
 			quickButtons.push(btn);
-			btn.addEventListener("click", async () => {
-				cat.icon = opt.value;
-				await this.plugin.updateCategoryIcon(cat.name, opt.value);
-				// Aggiorna solo l'evidenziazione, senza ricostruire l'intero pannello:
-				// altrimenti la pagina tornerebbe in cima ad ogni scelta.
-				highlightQuickMatch(opt.value);
-				customInput.value = "";
-				updateCustomPreview("");
+			btn.addEventListener("click", () => {
+				void (async () => {
+					cat.icon = opt.value;
+					await this.plugin.updateCategoryIcon(cat.name, opt.value);
+					// Aggiorna solo l'evidenziazione, senza ricostruire l'intero pannello:
+					// altrimenti la pagina tornerebbe in cima ad ogni scelta.
+					highlightQuickMatch(opt.value);
+					customInput.value = "";
+					updateCustomPreview("");
+				})();
 			});
 		}
 
@@ -1264,19 +1278,23 @@ export class QuickNotesBoardSettingTab extends PluginSettingTab {
 		colorInput.addEventListener("input", () => {
 			previewEl.setCssStyles({ color: colorInput.value });
 		});
-		colorInput.addEventListener("change", async () => {
-			cat.iconColor = colorInput.value;
-			await this.plugin.updateCategoryIconColor(cat.name, colorInput.value);
+		colorInput.addEventListener("change", () => {
+			void (async () => {
+				cat.iconColor = colorInput.value;
+				await this.plugin.updateCategoryIconColor(cat.name, colorInput.value);
+			})();
 		});
 		colorRow.createEl("button", {
 			cls: "qnb-icon-picker-custom-apply",
 			attr: { type: "button" },
 			text: this.tr("settings.categories.titleColorReset"),
-		}).addEventListener("click", async () => {
-			cat.iconColor = "";
-			await this.plugin.updateCategoryIconColor(cat.name, "");
-			colorInput.value = "#ffffff";
-			previewEl.setCssStyles({ color: "" });
+		}).addEventListener("click", () => {
+			void (async () => {
+				cat.iconColor = "";
+				await this.plugin.updateCategoryIconColor(cat.name, "");
+				colorInput.value = "#ffffff";
+				previewEl.setCssStyles({ color: "" });
+			})();
 		});
 
 		const hintRow = wrapper.createDiv({ cls: "qnb-icon-picker-hint-row" });
@@ -1358,27 +1376,31 @@ export class QuickNotesBoardSettingTab extends PluginSettingTab {
 				row.settingEl.addEventListener("dragleave", () => {
 					row.settingEl.removeClass("qnb-drag-over");
 				});
-				row.settingEl.addEventListener("drop", async (evt) => {
-					evt.preventDefault();
-					row.settingEl.removeClass("qnb-drag-over");
-					const draggedId = this.draggedGroupId;
-					const draggedSiblings = this.draggedGroupSiblings;
-					this.draggedGroupId = null;
-					this.draggedGroupSiblings = null;
-					if (!draggedId || draggedSiblings !== groups || draggedId === grp.id) return;
-					await this.plugin.reorderGroup(categoryName, draggedId, idx);
-					renderList();
+				row.settingEl.addEventListener("drop", (evt) => {
+					void (async () => {
+						evt.preventDefault();
+						row.settingEl.removeClass("qnb-drag-over");
+						const draggedId = this.draggedGroupId;
+						const draggedSiblings = this.draggedGroupSiblings;
+						this.draggedGroupId = null;
+						this.draggedGroupSiblings = null;
+						if (!draggedId || draggedSiblings !== groups || draggedId === grp.id) return;
+						await this.plugin.reorderGroup(categoryName, draggedId, idx);
+						renderList();
+					})();
 				});
 
 				row.addText((text) => {
 					text.setValue(grp.name);
 					text.onChange((v) => (pendingName = v));
-					text.inputEl.addEventListener("blur", async () => {
-						const trimmed = pendingName.trim();
-						if (trimmed && trimmed !== grp.name) {
-							await this.plugin.renameGroup(categoryName, grp.id, trimmed);
-							renderList();
-						}
+					text.inputEl.addEventListener("blur", () => {
+						void (async () => {
+							const trimmed = pendingName.trim();
+							if (trimmed && trimmed !== grp.name) {
+								await this.plugin.renameGroup(categoryName, grp.id, trimmed);
+								renderList();
+							}
+						})();
 					});
 				});
 
@@ -1685,11 +1707,13 @@ export class QuickNotesBoardSettingTab extends PluginSettingTab {
 				}
 				swatch.setAttr("aria-label", hex);
 				swatches.push(swatch);
-				swatch.addEventListener("click", async () => {
-					// Aggiorna solo la selezione, senza ricostruire l'intero pannello:
-					// altrimenti la pagina tornerebbe in cima ad ogni scelta.
-					await this.plugin.setBackgroundColor(hex);
-					swatches.forEach((s) => s.toggleClass("is-selected", s === swatch));
+				swatch.addEventListener("click", () => {
+					void (async () => {
+						// Aggiorna solo la selezione, senza ricostruire l'intero pannello:
+						// altrimenti la pagina tornerebbe in cima ad ogni scelta.
+						await this.plugin.setBackgroundColor(hex);
+						swatches.forEach((s) => s.toggleClass("is-selected", s === swatch));
+					})();
 				});
 			}
 		};
@@ -1778,26 +1802,28 @@ export class QuickNotesBoardSettingTab extends PluginSettingTab {
 		input.setCssStyles({ opacity: "0" });
 		input.setCssStyles({ pointerEvents: "none" });
 
-		input.addEventListener("change", async () => {
-			const file = input.files?.[0];
-			input.remove();
-			if (!file) return;
+		input.addEventListener("change", () => {
+			void (async () => {
+				const file = input.files?.[0];
+				input.remove();
+				if (!file) return;
 
-			const ext = (file.name.split(".").pop() || "png").toLowerCase();
-			if (!ACCEPTED_EXTENSIONS.includes(ext)) {
-				new Notice(this.tr("settings.image.unsupported"));
-				return;
-			}
+				const ext = (file.name.split(".").pop() || "png").toLowerCase();
+				if (!ACCEPTED_EXTENSIONS.includes(ext)) {
+					new Notice(this.tr("settings.image.unsupported"));
+					return;
+				}
 
-			try {
-				const buffer = await file.arrayBuffer();
-				await this.plugin.setBackgroundImage(buffer, ext);
-				new Notice(this.tr("settings.image.updated"));
-				onDone();
-			} catch (e) {
-				console.error("Quick Notes Board: errore nel salvataggio dell'immagine", e);
-				new Notice(this.tr("settings.image.saveError"));
-			}
+				try {
+					const buffer = await file.arrayBuffer();
+					await this.plugin.setBackgroundImage(buffer, ext);
+					new Notice(this.tr("settings.image.updated"));
+					onDone();
+				} catch (e) {
+					console.error("Quick Notes Board: errore nel salvataggio dell'immagine", e);
+					new Notice(this.tr("settings.image.saveError"));
+				}
+			})();
 		});
 
 		input.click();

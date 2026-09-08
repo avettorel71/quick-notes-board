@@ -373,11 +373,11 @@ export class FontSizeModal extends Modal {
  * Archivio (stessa icona già usata altrove per quella categoria; "file-text" di riserva
  * se la categoria non ne ha una impostata). */
 function buildNoteTitleWithIcon(plugin: QuickNotesBoardPlugin, note: QuickNote): DocumentFragment {
-	const frag = document.createDocumentFragment();
-	const iconSpan = frag.createSpan({ cls: "qnb-list-item-icon" });
-	setIcon(iconSpan, plugin.getCategoryIcon(note.category) || "file-text");
-	frag.appendChild(document.createTextNode(note.title));
-	return frag;
+	return createFragment((frag) => {
+		const iconSpan = frag.createSpan({ cls: "qnb-list-item-icon" });
+		setIcon(iconSpan, plugin.getCategoryIcon(note.category) || "file-text");
+		frag.appendChild(document.createTextNode(note.title));
+	});
 }
 
 /** Intestazione h3 con un'icona davanti al testo, per i titoli delle finestre. */
@@ -1107,7 +1107,7 @@ export class BoardActivityModal extends Modal {
 			};
 
 			window.addEventListener("mousemove", onMove);
-			window.addEventListener("mouseup", onUp);
+			window.addEventListener("mouseup", () => void onUp());
 		});
 	}
 
@@ -2138,7 +2138,7 @@ export class BoardStructureModal extends Modal {
 			};
 
 			window.addEventListener("mousemove", onMove);
-			window.addEventListener("mouseup", onUp);
+			window.addEventListener("mouseup", () => void onUp());
 		});
 	}
 
@@ -2179,7 +2179,7 @@ export class BoardStructureModal extends Modal {
 					height: String(totalHeight + pad * 2),
 					viewBox: `${-pad} ${-pad} ${totalWidth + pad * 2} ${totalHeight + pad * 2}`,
 				},
-			}) as SVGSVGElement;
+			});
 
 			for (const root of roots) drawStructureNode(svg, root);
 		}

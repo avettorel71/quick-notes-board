@@ -100,7 +100,7 @@ export class QuickNotesBoardView extends ItemView {
 
 	/** Ridisegna tutto da zero: toolbar (testi/lingua) + board. Usato anche quando cambiano le impostazioni. */
 	refresh() {
-		this.rebuild();
+		void this.rebuild();
 	}
 
 	private async rebuild() {
@@ -226,14 +226,16 @@ export class QuickNotesBoardView extends ItemView {
 
 		this.toggleAllBtn = toolbar.createEl("button", { cls: "qnb-btn qnb-category-btn", text: this.tr("view.toggleAll") });
 		this.updateToggleAllButtonState();
-		this.toggleAllBtn.addEventListener("click", async () => {
-			this.plugin.playSound("toolbar-toggle-all");
-			const activeNotes = this.plugin.notes.filter((n) => !n.deleted && !n.archived && !n.pinned);
-			const anyVisible = activeNotes.some((n) => !n.hidden);
-			for (const n of activeNotes) n.hidden = anyVisible;
-			await this.plugin.saveNotes();
-			this.refreshVisibilityButtons();
-			this.renderBoard();
+		this.toggleAllBtn.addEventListener("click", () => {
+			void (async () => {
+				this.plugin.playSound("toolbar-toggle-all");
+				const activeNotes = this.plugin.notes.filter((n) => !n.deleted && !n.archived && !n.pinned);
+				const anyVisible = activeNotes.some((n) => !n.hidden);
+				for (const n of activeNotes) n.hidden = anyVisible;
+				await this.plugin.saveNotes();
+				this.refreshVisibilityButtons();
+				this.renderBoard();
+			})();
 		});
 
 		const searchWrapper = toolbar.createDiv({ cls: "qnb-toolbar-search" });
@@ -363,14 +365,16 @@ export class QuickNotesBoardView extends ItemView {
 			catBtn.setCssProps({ "--qnb-cat-fg": getContrastTextColor(cat.color) });
 			this.categoryButtons.set(cat.name, catBtn);
 			this.updateCategoryButtonState(catBtn, cat.name);
-			catBtn.addEventListener("click", async () => {
-				this.plugin.playSound("toolbar-category-toggle");
-				const notesOfCat = this.plugin.notes.filter((n) => !n.deleted && !n.archived && !n.pinned && n.category === cat.name);
-				const anyVisible = notesOfCat.some((n) => !n.hidden);
-				for (const n of notesOfCat) n.hidden = anyVisible;
-				await this.plugin.saveNotes();
-				this.refreshVisibilityButtons();
-				this.renderBoard();
+			catBtn.addEventListener("click", () => {
+				void (async () => {
+					this.plugin.playSound("toolbar-category-toggle");
+					const notesOfCat = this.plugin.notes.filter((n) => !n.deleted && !n.archived && !n.pinned && n.category === cat.name);
+					const anyVisible = notesOfCat.some((n) => !n.hidden);
+					for (const n of notesOfCat) n.hidden = anyVisible;
+					await this.plugin.saveNotes();
+					this.refreshVisibilityButtons();
+					this.renderBoard();
+				})();
 			});
 			catBtn.addEventListener("contextmenu", (evt) => {
 				evt.preventDefault();
@@ -703,15 +707,17 @@ export class QuickNotesBoardView extends ItemView {
 		item.createSpan({ text: grp.name });
 
 		if (hasNotes) {
-			item.addEventListener("click", async (evt) => {
-				evt.stopPropagation();
-				// Riusa volutamente il suono del toggle categoria, come deciso.
-				this.plugin.playSound("toolbar-category-toggle");
-				for (const n of notesOfGroup) n.hidden = anyVisible;
-				await this.plugin.saveNotes();
-				this.closeGroupPopup();
-				this.refreshVisibilityButtons();
-				this.renderBoard();
+			item.addEventListener("click", (evt) => {
+				void (async () => {
+					evt.stopPropagation();
+					// Riusa volutamente il suono del toggle categoria, come deciso.
+					this.plugin.playSound("toolbar-category-toggle");
+					for (const n of notesOfGroup) n.hidden = anyVisible;
+					await this.plugin.saveNotes();
+					this.closeGroupPopup();
+					this.refreshVisibilityButtons();
+					this.renderBoard();
+				})();
 			});
 		}
 
@@ -1046,7 +1052,7 @@ export class QuickNotesBoardView extends ItemView {
 		};
 
 		window.addEventListener("mousemove", onMove);
-		window.addEventListener("mouseup", onUp);
+		window.addEventListener("mouseup", () => void onUp());
 	}
 
 	/** Aggiorna solo la classe "selezionata" sulle note già a schermo, senza ridisegnare
@@ -1398,7 +1404,7 @@ export class QuickNotesBoardView extends ItemView {
 					// scrivere il file ad ogni singolo pixel di variazione.
 					window.clearTimeout(fontSizeSaveTimeout);
 					fontSizeSaveTimeout = window.setTimeout(() => {
-						this.plugin.saveNotes();
+						void this.plugin.saveNotes();
 					}, 300);
 				};
 				fontSizeBtn.addEventListener("click", (evt) => {
@@ -1473,7 +1479,7 @@ export class QuickNotesBoardView extends ItemView {
 					const textarea = bodyEl.querySelector("textarea");
 					if (textarea) {
 						// Fa scattare il normale flusso di salvataggio/uscita già gestito sul blur.
-						(textarea as HTMLTextAreaElement).blur();
+						textarea.blur();
 					} else {
 						this.enterEditMode(noteEl, bodyEl, note, toggleModeBtn);
 					}
@@ -1484,19 +1490,21 @@ export class QuickNotesBoardView extends ItemView {
 				const archiveBtn = actions.createEl("button", { cls: "qnb-note-action-btn", attr: { "aria-label": this.tr("view.note.archive") } });
 				setIcon(archiveBtn, "archive");
 				archiveBtn.addEventListener("mousedown", (evt) => evt.stopPropagation());
-				archiveBtn.addEventListener("click", async (evt) => {
-					evt.stopPropagation();
-					if (this.selectedNoteIds.has(note.id) && this.selectedNoteIds.size > 1) {
-						await this.bulkArchive();
-						return;
-					}
-					note.archived = true;
-					const idx = this.noteOrder.indexOf(note.id);
-					if (idx !== -1) this.noteOrder.splice(idx, 1);
-					this.plugin.playSound("note-archive");
-					await this.plugin.saveNotes();
-					this.refreshVisibilityButtons();
-					this.renderBoard();
+				archiveBtn.addEventListener("click", (evt) => {
+					void (async () => {
+						evt.stopPropagation();
+						if (this.selectedNoteIds.has(note.id) && this.selectedNoteIds.size > 1) {
+							await this.bulkArchive();
+							return;
+						}
+						note.archived = true;
+						const idx = this.noteOrder.indexOf(note.id);
+						if (idx !== -1) this.noteOrder.splice(idx, 1);
+						this.plugin.playSound("note-archive");
+						await this.plugin.saveNotes();
+						this.refreshVisibilityButtons();
+						this.renderBoard();
+					})();
 				});
 			},
 
@@ -1507,18 +1515,20 @@ export class QuickNotesBoardView extends ItemView {
 				});
 				setIcon(convertBtn, "file-plus-2");
 				convertBtn.addEventListener("mousedown", (evt) => evt.stopPropagation());
-				convertBtn.addEventListener("click", async (evt) => {
-					evt.stopPropagation();
-					if (this.selectedNoteIds.has(note.id) && this.selectedNoteIds.size > 1) {
-						await this.bulkConvertToNotes();
-						return;
-					}
-					const ok = await this.convertNoteToFile(note, { openAfter: true });
-					if (ok) {
-						await this.plugin.saveNotes();
-						this.renderBoard();
-						new Notice(this.tr("view.note.convertDone", { title: note.title }));
-					}
+				convertBtn.addEventListener("click", (evt) => {
+					void (async () => {
+						evt.stopPropagation();
+						if (this.selectedNoteIds.has(note.id) && this.selectedNoteIds.size > 1) {
+							await this.bulkConvertToNotes();
+							return;
+						}
+						const ok = await this.convertNoteToFile(note, { openAfter: true });
+						if (ok) {
+							await this.plugin.saveNotes();
+							this.renderBoard();
+							new Notice(this.tr("view.note.convertDone", { title: note.title }));
+						}
+					})();
 				});
 			},
 
@@ -1551,7 +1561,7 @@ export class QuickNotesBoardView extends ItemView {
 					} else {
 						// Se la nota è in modifica, salva subito il testo digitato prima di cifrarlo:
 						// altrimenti si perderebbero le modifiche non ancora confermate col blur.
-						const textarea = bodyEl.querySelector("textarea") as HTMLTextAreaElement | null;
+						const textarea = bodyEl.querySelector("textarea");
 						if (textarea) note.content = textarea.value;
 
 						new LockPasswordModal(this.app, this.plugin, "lock", async (password) => {
@@ -1572,19 +1582,21 @@ export class QuickNotesBoardView extends ItemView {
 				const deleteBtn = actions.createEl("button", { cls: "qnb-note-action-btn qnb-note-delete", attr: { "aria-label": this.tr("view.note.delete") } });
 				setIcon(deleteBtn, "trash-2");
 				deleteBtn.addEventListener("mousedown", (evt) => evt.stopPropagation());
-				deleteBtn.addEventListener("click", async (evt) => {
-					evt.stopPropagation();
-					if (this.selectedNoteIds.has(note.id) && this.selectedNoteIds.size > 1) {
-						await this.bulkTrash();
-						return;
-					}
-					note.deleted = true;
-					const idx = this.noteOrder.indexOf(note.id);
-					if (idx !== -1) this.noteOrder.splice(idx, 1);
-					this.plugin.playSound("note-delete");
-					await this.plugin.saveNotes();
-					this.refreshVisibilityButtons();
-					this.renderBoard();
+				deleteBtn.addEventListener("click", (evt) => {
+					void (async () => {
+						evt.stopPropagation();
+						if (this.selectedNoteIds.has(note.id) && this.selectedNoteIds.size > 1) {
+							await this.bulkTrash();
+							return;
+						}
+						note.deleted = true;
+						const idx = this.noteOrder.indexOf(note.id);
+						if (idx !== -1) this.noteOrder.splice(idx, 1);
+						this.plugin.playSound("note-delete");
+						await this.plugin.saveNotes();
+						this.refreshVisibilityButtons();
+						this.renderBoard();
+					})();
 				});
 			},
 
@@ -1593,13 +1605,15 @@ export class QuickNotesBoardView extends ItemView {
 				const favoriteBtn = actions.createEl("button", { cls: "qnb-note-action-btn" });
 				this.updateFavoriteIcon(favoriteBtn, note.favorite);
 				favoriteBtn.addEventListener("mousedown", (evt) => evt.stopPropagation());
-				favoriteBtn.addEventListener("click", async (evt) => {
-					evt.stopPropagation();
-					note.favorite = !note.favorite;
-					this.plugin.playSound("note-favorite");
-					await this.plugin.saveNotes();
-					this.refreshVisibilityButtons();
-					this.renderBoard();
+				favoriteBtn.addEventListener("click", (evt) => {
+					void (async () => {
+						evt.stopPropagation();
+						note.favorite = !note.favorite;
+						this.plugin.playSound("note-favorite");
+						await this.plugin.saveNotes();
+						this.refreshVisibilityButtons();
+						this.renderBoard();
+					})();
 				});
 			},
 
@@ -1631,17 +1645,19 @@ export class QuickNotesBoardView extends ItemView {
 				const pinBtn = actions.createEl("button", { cls: "qnb-note-action-btn" });
 				this.updatePinIcon(pinBtn, note.pinned);
 				pinBtn.addEventListener("mousedown", (evt) => evt.stopPropagation());
-				pinBtn.addEventListener("click", async (evt) => {
-					evt.stopPropagation();
-					if (this.selectedNoteIds.has(note.id) && this.selectedNoteIds.size > 1) {
-						await this.bulkTogglePin();
-						return;
-					}
-					note.pinned = !note.pinned;
-					this.plugin.playSound("note-pin");
-					await this.plugin.saveNotes();
-					this.refreshVisibilityButtons();
-					this.renderBoard();
+				pinBtn.addEventListener("click", (evt) => {
+					void (async () => {
+						evt.stopPropagation();
+						if (this.selectedNoteIds.has(note.id) && this.selectedNoteIds.size > 1) {
+							await this.bulkTogglePin();
+							return;
+						}
+						note.pinned = !note.pinned;
+						this.plugin.playSound("note-pin");
+						await this.plugin.saveNotes();
+						this.refreshVisibilityButtons();
+						this.renderBoard();
+					})();
 				});
 			},
 
@@ -1681,18 +1697,20 @@ export class QuickNotesBoardView extends ItemView {
 		const minimizeBtn = actions.createEl("button", { cls: "qnb-note-action-btn", attr: { "aria-label": this.tr("view.note.minimize") } });
 		setIcon(minimizeBtn, "x");
 		minimizeBtn.addEventListener("mousedown", (evt) => evt.stopPropagation());
-		minimizeBtn.addEventListener("click", async (evt) => {
-			evt.stopPropagation();
-			if (this.selectedNoteIds.has(note.id) && this.selectedNoteIds.size > 1) {
-				await this.bulkMinimize();
-				return;
-			}
-			note.hidden = true;
-			this.plugin.stopDueAlarm(note.id);
-			this.plugin.playSound("note-minimize");
-			await this.plugin.saveNotes();
-			this.refreshVisibilityButtons();
-			this.renderBoard();
+		minimizeBtn.addEventListener("click", (evt) => {
+			void (async () => {
+				evt.stopPropagation();
+				if (this.selectedNoteIds.has(note.id) && this.selectedNoteIds.size > 1) {
+					await this.bulkMinimize();
+					return;
+				}
+				note.hidden = true;
+				this.plugin.stopDueAlarm(note.id);
+				this.plugin.playSound("note-minimize");
+				await this.plugin.saveNotes();
+				this.refreshVisibilityButtons();
+				this.renderBoard();
+			})();
 		});
 
 		// Corpo: markdown renderizzato, click per modificare
@@ -1769,7 +1787,7 @@ export class QuickNotesBoardView extends ItemView {
 		});
 		noteEl.addEventListener("qnb-force-blur", () => {
 			const textarea = bodyEl.querySelector("textarea");
-			if (textarea) (textarea as HTMLTextAreaElement).blur();
+			if (textarea) textarea.blur();
 		});
 
 		// Drag dalla testata
@@ -1889,7 +1907,7 @@ export class QuickNotesBoardView extends ItemView {
 		};
 
 		window.addEventListener("mousemove", onMove);
-		window.addEventListener("mouseup", onUp);
+		window.addEventListener("mouseup", () => void onUp());
 	}
 
 	private startTitleEdit(titleEl: HTMLElement, note: QuickNote) {
@@ -1912,14 +1930,14 @@ export class QuickNotesBoardView extends ItemView {
 			titleEl.setText(note.title);
 		};
 
-		input.addEventListener("blur", () => finish(true));
+		input.addEventListener("blur", () => void finish(true));
 		input.addEventListener("keydown", (evt) => {
 			if (evt.key === "Enter") {
 				evt.preventDefault();
 				input.blur();
 			} else if (evt.key === "Escape") {
 				evt.preventDefault();
-				finish(false);
+				void finish(false);
 			}
 		});
 
@@ -2019,21 +2037,21 @@ export class QuickNotesBoardView extends ItemView {
 			return;
 		}
 		const renderEl = bodyEl.createDiv({ cls: "qnb-note-rendered markdown-rendered" });
-		MarkdownRenderer.render(this.app, note.content, renderEl, "", this);
+		void MarkdownRenderer.render(this.app, note.content, renderEl, "", this);
 
 		// Link interni [[...]]: click per navigare, hover per l'anteprima (come nelle note normali).
 		renderEl.addEventListener("click", (evt) => {
-			const link = (evt.target as HTMLElement).closest("a.internal-link") as HTMLAnchorElement | null;
+			const link = (evt.target as HTMLElement).closest("a.internal-link");
 			if (link) {
 				evt.preventDefault();
 				evt.stopPropagation();
 				const linktext = link.getAttribute("href") || link.getAttr("data-href") || "";
-				if (linktext) this.app.workspace.openLinkText(linktext, "", evt.ctrlKey || evt.metaKey);
+				if (linktext) void this.app.workspace.openLinkText(linktext, "", evt.ctrlKey || evt.metaKey);
 				return;
 			}
 
 			// Collegamento a un'altra quick note della board: [Titolo](qnb://id).
-			const qnbLink = (evt.target as HTMLElement).closest("a[href^='qnb://']") as HTMLAnchorElement | null;
+			const qnbLink = (evt.target as HTMLElement).closest("a[href^='qnb://']");
 			if (qnbLink) {
 				evt.preventDefault();
 				evt.stopPropagation();
@@ -2042,7 +2060,7 @@ export class QuickNotesBoardView extends ItemView {
 			}
 		});
 		renderEl.addEventListener("mouseover", (evt) => {
-			const link = (evt.target as HTMLElement).closest("a.internal-link") as HTMLAnchorElement | null;
+			const link = (evt.target as HTMLElement).closest("a.internal-link");
 			if (!link) return;
 			const linktext = link.getAttribute("href") || link.getAttr("data-href") || "";
 			this.app.workspace.trigger("hover-link", {
@@ -2069,15 +2087,17 @@ export class QuickNotesBoardView extends ItemView {
 			checkbox.setCssStyles({ cursor: "pointer" });
 			const lineIndex = taskLineIndices[domIndex];
 			if (lineIndex === undefined) return;
-			checkbox.addEventListener("click", async (evt) => {
-				evt.stopPropagation(); // non deve aprire la modalità modifica
-				note.content = toggleTaskLine(note.content, lineIndex);
-				note.modifiedAt = Date.now();
-				await this.plugin.saveNotes();
-				// Ridisegna leggendo il testo aggiornato: è Obsidian stesso, durante il
-				// render, ad applicare la barratura e lo stile "spuntato" corretti — il
-				// solo toggle nativo della checkbox non lo farebbe scattare.
-				this.renderNoteBodyPreview(bodyEl, note, noteEl, toggleBtn);
+			checkbox.addEventListener("click", (evt) => {
+				void (async () => {
+					evt.stopPropagation(); // non deve aprire la modalità modifica
+					note.content = toggleTaskLine(note.content, lineIndex);
+					note.modifiedAt = Date.now();
+					await this.plugin.saveNotes();
+					// Ridisegna leggendo il testo aggiornato: è Obsidian stesso, durante il
+					// render, ad applicare la barratura e lo stile "spuntato" corretti — il
+					// solo toggle nativo della checkbox non lo farebbe scattare.
+					this.renderNoteBodyPreview(bodyEl, note, noteEl, toggleBtn);
+				})();
 			});
 		});
 
@@ -2090,7 +2110,7 @@ export class QuickNotesBoardView extends ItemView {
 		const embedEls = renderEl.querySelectorAll(".internal-embed.image-embed, .internal-embed.media-embed");
 		embedEls.forEach((embedEl, domIndex) => {
 			const match = embedMatches[domIndex];
-			const img = embedEl.querySelector("img") as HTMLImageElement | null;
+			const img = embedEl.querySelector("img");
 			if (!match || !img) return;
 
 			const wrapper = embedEl as HTMLElement;
@@ -2124,7 +2144,7 @@ export class QuickNotesBoardView extends ItemView {
 				};
 
 				window.addEventListener("mousemove", onMove);
-				window.addEventListener("mouseup", onUp);
+				window.addEventListener("mouseup", () => void onUp());
 			});
 		});
 
@@ -2337,7 +2357,7 @@ export class QuickNotesBoardView extends ItemView {
 
 		textarea.addEventListener("blur", () => {
 			hideSuggestions();
-			save();
+			void save();
 		});
 		textarea.addEventListener("keydown", (evt) => {
 			const mod = evt.ctrlKey || evt.metaKey;
@@ -2474,7 +2494,7 @@ export class QuickNotesBoardView extends ItemView {
 		};
 
 		window.addEventListener("mousemove", onMove);
-		window.addEventListener("mouseup", onUp);
+		window.addEventListener("mouseup", () => void onUp());
 	}
 
 	/** Riproduce il piccolo "assestamento elastico" su una nota appena rilasciata dal
@@ -2628,7 +2648,7 @@ function highlightTextInElement(root: HTMLElement, query: string) {
 		const lower = value.toLowerCase();
 		if (!lower.includes(q)) continue;
 
-		const frag = document.createDocumentFragment();
+		const frag = createFragment();
 		let lastIndex = 0;
 		let idx = lower.indexOf(q);
 		while (idx !== -1) {

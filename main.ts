@@ -346,7 +346,7 @@ export default class QuickNotesBoardPlugin extends Plugin {
 
 		const leaf = workspace.getLeaf("tab");
 		await leaf.setViewState({ type: VIEW_TYPE_QNB, active: true });
-		workspace.revealLeaf(leaf);
+		await workspace.revealLeaf(leaf);
 	}
 
 	async loadSettings() {
