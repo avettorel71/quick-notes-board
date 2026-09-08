@@ -138,7 +138,7 @@ const it: Dict = {
 	"settings.categories.new.duplicate": "Categoria già esistente.",
 
 	"settings.sounds.heading": "Effetti sonori",
-	"settings.sounds.desc": "Seleziona per ogni azione un file audio già presente nella cartella del plugin (.obsidian/plugins/quick-notes-board/). Aggiungi lì i tuoi file audio, poi aggiorna l'elenco qui sotto: più eventi possono condividere lo stesso file.",
+	"settings.sounds.desc": "Seleziona per ogni azione un file audio già presente nella cartella del plugin ({configDir}/plugins/quick-notes-board/). Aggiungi lì i tuoi file audio, poi aggiorna l'elenco qui sotto: più eventi possono condividere lo stesso file.",
 	"settings.sounds.group.note": "Pulsanti della nota",
 	"settings.sounds.group.toolbar": "Barra degli strumenti",
 	"settings.sounds.event.boardOpen": "Apertura board",
@@ -603,7 +603,7 @@ const en: Dict = {
 	"settings.categories.new.duplicate": "Category already exists.",
 
 	"settings.sounds.heading": "Sound effects",
-	"settings.sounds.desc": "For each action, select an audio file already present in the plugin folder (.obsidian/plugins/quick-notes-board/). Add your audio files there, then refresh the list below: multiple events can share the same file.",
+	"settings.sounds.desc": "For each action, select an audio file already present in the plugin folder ({configDir}/plugins/quick-notes-board/). Add your audio files there, then refresh the list below: multiple events can share the same file.",
 	"settings.sounds.group.note": "Note buttons",
 	"settings.sounds.group.toolbar": "Toolbar",
 	"settings.sounds.event.boardOpen": "Open board",
