@@ -10,8 +10,8 @@ function colorizeCategoryOptions(selectEl: HTMLSelectElement, categories: QnbCat
 	for (const option of Array.from(selectEl.options)) {
 		const cat = categories.find((c) => c.name === option.value);
 		if (cat) {
-			option.style.backgroundColor = cat.color;
-			option.style.color = getContrastTextColor(cat.color);
+			option.setCssStyles({ backgroundColor: cat.color });
+			option.setCssStyles({ color: getContrastTextColor(cat.color) });
 		}
 	}
 }
@@ -59,7 +59,7 @@ export class NewNoteModal extends Modal {
 		this.plugin.playSound("dialog-new-note");
 		const { contentEl } = this;
 		contentEl.empty();
-		contentEl.createEl("h3", { text: this.tr("modal.newNote.title") });
+		new Setting(contentEl).setName(this.tr("modal.newNote.title")).setHeading();
 
 		new Setting(contentEl).setName(this.tr("modal.newNote.titleLabel")).addText((text) => {
 			text.setPlaceholder(this.tr("modal.newNote.titlePlaceholder")).onChange((value) => {
@@ -170,7 +170,7 @@ export class ChangeCategoryModal extends Modal {
 		this.plugin.playSound("dialog-change-category");
 		const { contentEl } = this;
 		contentEl.empty();
-		contentEl.createEl("h3", { text: this.tr("modal.changeCategory.title") });
+		new Setting(contentEl).setName(this.tr("modal.changeCategory.title")).setHeading();
 
 		new Setting(contentEl).setName(this.tr("modal.changeCategory.categoryLabel")).addDropdown((dd) => {
 			for (const cat of this.categories) {
@@ -294,7 +294,7 @@ export class FontSizeModal extends Modal {
 		this.plugin.playSound("dialog-font-size");
 		const { contentEl } = this;
 		contentEl.empty();
-		contentEl.createEl("h3", { text: this.tr("modal.fontSize.title") });
+		new Setting(contentEl).setName(this.tr("modal.fontSize.title")).setHeading();
 		contentEl.createEl("p", { cls: "setting-item-description", text: this.tr("modal.fontSize.desc") });
 
 		new Setting(contentEl)
@@ -384,9 +384,10 @@ function buildNoteTitleWithIcon(plugin: QuickNotesBoardPlugin, note: QuickNote):
 
 /** Intestazione h3 con un'icona davanti al testo, per i titoli delle finestre. */
 function createHeadingWithIcon(containerEl: HTMLElement, iconName: string, text: string) {
-	const heading = containerEl.createEl("h3", { cls: "qnb-modal-heading" });
-	setIcon(heading.createSpan({ cls: "qnb-modal-heading-icon" }), iconName);
-	heading.createSpan({ text });
+	const setting = new Setting(containerEl).setName(text).setHeading();
+	const iconSpan = createSpan({ cls: "qnb-modal-heading-icon" });
+	setIcon(iconSpan, iconName);
+	setting.nameEl.prepend(iconSpan);
 }
 
 export class TrashModal extends Modal {
@@ -623,7 +624,7 @@ export class LockPasswordModal extends Modal {
 		contentEl.empty();
 
 		const isLock = this.mode === "lock";
-		contentEl.createEl("h3", { text: this.tr(isLock ? "modal.lock.title" : "modal.unlock.title") });
+		new Setting(contentEl).setName(this.tr(isLock ? "modal.lock.title" : "modal.unlock.title")).setHeading();
 		contentEl.createEl("p", {
 			cls: "setting-item-description",
 			text: this.tr(isLock ? "modal.lock.desc" : "modal.unlock.desc"),
@@ -659,7 +660,7 @@ export class LockPasswordModal extends Modal {
 		}
 
 		this.errorEl = contentEl.createDiv({ cls: "qnb-modal-error" });
-		this.errorEl.style.display = "none";
+		this.errorEl.setCssStyles({ display: "none" });
 
 		const footer = new Setting(contentEl);
 		footer.addButton((btn) => btn.setButtonText(this.tr("modal.cancel")).onClick(() => this.close()));
@@ -675,7 +676,7 @@ export class LockPasswordModal extends Modal {
 	private showError(message: string) {
 		if (!this.errorEl) return;
 		this.errorEl.setText(message);
-		this.errorEl.style.display = "block";
+		this.errorEl.setCssStyles({ display: "block" });
 	}
 
 	private async trySubmit() {
@@ -736,7 +737,7 @@ export class NoteInfoModal extends Modal {
 		this.plugin.playSound("dialog-note-info");
 		const { contentEl } = this;
 		contentEl.empty();
-		contentEl.createEl("h3", { text: this.note.title || this.tr("view.note.untitled") });
+		new Setting(contentEl).setName(this.note.title || this.tr("view.note.untitled")).setHeading();
 
 		const rows: { label: string; value: string }[] = [
 			{ label: this.tr("modal.noteInfo.created"), value: new Date(this.note.createdAt).toLocaleString() },
@@ -767,7 +768,7 @@ export class NoteInfoModal extends Modal {
 				if (!label) continue; // etichetta cancellata nel frattempo: la saltiamo senza errori
 				const chip = valueEl.createSpan({ cls: "qnb-note-info-label-chip" });
 				const dot = chip.createSpan({ cls: "qnb-label-dot" });
-				dot.style.background = label.color || "#888888";
+				dot.setCssStyles({ background: label.color || "#888888" });
 				chip.createSpan({ text: label.name });
 			}
 		}
@@ -812,7 +813,7 @@ function renderGroupNode(
 ) {
 	const count = countGroupCumulative(grp, notesByGroupId);
 	const row = containerEl.createDiv({ cls: "qnb-cat-stats-row" });
-	row.style.paddingLeft = `${depth * 18}px`;
+	row.setCssStyles({ paddingLeft: `${depth * 18}px` });
 	row.createSpan({ cls: "qnb-cat-stats-name", text: grp.name });
 	row.createSpan({ cls: "qnb-cat-stats-count", text: tr("modal.categoryStats.noteCount", { count: String(count) }) });
 
@@ -864,7 +865,7 @@ export class CategoryStatsModal extends Modal {
 		this.plugin.playSound("dialog-category-stats");
 		const { contentEl } = this;
 		contentEl.empty();
-		contentEl.createEl("h3", { text: this.tr("modal.categoryStats.title", { category: this.category.name }) });
+		new Setting(contentEl).setName(this.tr("modal.categoryStats.title", { category: this.category.name })).setHeading();
 
 		const activeNotes = this.plugin.notes.filter(
 			(n) => !n.deleted && !n.archived && n.category === this.category.name
@@ -926,7 +927,7 @@ export class BoardInfoModal extends Modal {
 		this.plugin.playSound("dialog-board-info");
 		const { contentEl } = this;
 		contentEl.empty();
-		contentEl.createEl("h3", { text: this.tr("modal.boardInfo.title") });
+		new Setting(contentEl).setName(this.tr("modal.boardInfo.title")).setHeading();
 
 		const activeNotes = this.plugin.notes.filter((n) => !n.deleted && !n.archived);
 
@@ -935,7 +936,7 @@ export class BoardInfoModal extends Modal {
 
 			const catSection = contentEl.createDiv({ cls: "qnb-board-info-category" });
 			const catHeader = catSection.createDiv({ cls: "qnb-board-info-category-header" });
-			catHeader.style.setProperty("--qnb-cat-color", cat.color);
+			catHeader.setCssProps({ "--qnb-cat-color": cat.color });
 			catHeader.createSpan({ cls: "qnb-board-info-category-dot" });
 			catHeader.createSpan({ cls: "qnb-board-info-category-name", text: cat.name });
 			catHeader.createSpan({
@@ -1064,8 +1065,8 @@ export class BoardActivityModal extends Modal {
 	onOpen() {
 		this.plugin.playSound("dialog-board-activity");
 		this.modalEl.addClass("qnb-activity-modal-resizable");
-		this.modalEl.style.width = `${this.plugin.settings.activityChartWindowWidth}px`;
-		this.modalEl.style.height = `${this.plugin.settings.activityChartWindowHeight}px`;
+		this.modalEl.setCssStyles({ width: `${this.plugin.settings.activityChartWindowWidth}px` });
+		this.modalEl.setCssStyles({ height: `${this.plugin.settings.activityChartWindowHeight}px` });
 
 		// I due grafici si ridisegnano da soli, proporzionati allo spazio che hanno
 		// davvero a disposizione, ogni volta che quello spazio cambia — sia trascinando
@@ -1094,8 +1095,8 @@ export class BoardActivityModal extends Modal {
 			const onMove = (moveEvt: MouseEvent) => {
 				const newWidth = startWidth + (moveEvt.clientX - startX);
 				const newHeight = startHeight + (moveEvt.clientY - startY);
-				this.modalEl.style.width = `${Math.max(480, newWidth)}px`;
-				this.modalEl.style.height = `${Math.max(400, newHeight)}px`;
+				this.modalEl.setCssStyles({ width: `${Math.max(480, newWidth)}px` });
+				this.modalEl.setCssStyles({ height: `${Math.max(400, newHeight)}px` });
 			};
 
 			const onUp = async () => {
@@ -1116,7 +1117,7 @@ export class BoardActivityModal extends Modal {
 		const { contentEl } = this;
 		contentEl.empty();
 		contentEl.addClass("qnb-activity-modal");
-		contentEl.createEl("h3", { text: this.tr("modal.boardActivity.title") });
+		new Setting(contentEl).setName(this.tr("modal.boardActivity.title")).setHeading();
 
 		// Navigazione mese (frecce), senza poter andare oltre il mese corrente.
 		const nav = contentEl.createDiv({ cls: "qnb-activity-nav" });
@@ -1264,8 +1265,8 @@ export class BoardActivityModal extends Modal {
 			attr: { viewBox: `0 0 ${width} ${height}`, preserveAspectRatio: "none" },
 			cls: "qnb-activity-svg",
 		});
-		svg.style.width = `${width}px`;
-		svg.style.height = `${height}px`;
+		svg.setCssStyles({ width: `${width}px` });
+		svg.setCssStyles({ height: `${height}px` });
 
 		data.forEach((d, idx) => {
 			const barHeight = (d.value / maxValue) * (height - bottomMargin - topMargin);
@@ -1452,7 +1453,7 @@ export class DueDateModal extends Modal {
 	private render() {
 		const { contentEl } = this;
 		contentEl.empty();
-		contentEl.createEl("h3", { text: this.tr("modal.dueDate.title") });
+		new Setting(contentEl).setName(this.tr("modal.dueDate.title")).setHeading();
 
 		new Setting(contentEl).setName(this.tr("modal.dueDate.dueDateLabel")).addText((text) => {
 			text.inputEl.type = "date";
@@ -1685,7 +1686,7 @@ export class AlarmListModal extends Modal {
 	private render() {
 		const { contentEl } = this;
 		contentEl.empty();
-		contentEl.createEl("h3", { text: this.tr("modal.alarmList.title") });
+		new Setting(contentEl).setName(this.tr("modal.alarmList.title")).setHeading();
 
 		const notes = this.plugin.notes
 			.filter((n) => !n.deleted && !n.archived && n.dueDate)
@@ -1723,7 +1724,7 @@ export class AlarmListModal extends Modal {
 			const catCell = row.createDiv({ cls: "qnb-alarm-cell-category" });
 			const dot = catCell.createSpan({ cls: "qnb-alarm-cat-dot" });
 			const catColor = this.plugin.getCategoryColor(note.category);
-			if (catColor) dot.style.background = catColor;
+			if (catColor) dot.setCssStyles({ background: catColor });
 			catCell.createSpan({ text: note.category });
 
 			const groupPath = note.groupId ? this.plugin.getGroupPath(note.category, note.groupId) : "";
@@ -1800,7 +1801,7 @@ export class NoteExplorerModal extends Modal {
 	private render() {
 		const { contentEl } = this;
 		contentEl.empty();
-		contentEl.createEl("h3", { text: this.tr("modal.noteExplorer.title") });
+		new Setting(contentEl).setName(this.tr("modal.noteExplorer.title")).setHeading();
 
 		const filterInput = contentEl.createEl("input", {
 			cls: "qnb-explorer-filter",
@@ -1857,7 +1858,7 @@ export class NoteExplorerModal extends Modal {
 			const catHeader = treeEl.createDiv({ cls: "qnb-explorer-category-header" });
 			setIcon(catHeader.createSpan({ cls: "qnb-explorer-chevron" }), isExpanded ? "chevron-down" : "chevron-right");
 			const dot = catHeader.createSpan({ cls: "qnb-explorer-cat-dot" });
-			if (category.color) dot.style.background = category.color;
+			if (category.color) dot.setCssStyles({ background: category.color });
 			setIcon(catHeader.createSpan({ cls: "qnb-explorer-header-icon" }), catIcon);
 			catHeader.createSpan({ text: category.name });
 			catHeader.addEventListener("click", () => {
@@ -1899,7 +1900,7 @@ export class NoteExplorerModal extends Modal {
 		if (!groupHasNotesRecursive(grp, notesByGroupId)) return; // ramo vuoto: salta del tutto
 
 		const row = treeEl.createDiv({ cls: "qnb-explorer-group-header" });
-		row.style.paddingLeft = `${depth * 18}px`;
+		row.setCssStyles({ paddingLeft: `${depth * 18}px` });
 		setIcon(row.createSpan({ cls: "qnb-explorer-header-icon" }), categoryIcon);
 		row.createSpan({ text: grp.name });
 
@@ -1913,7 +1914,7 @@ export class NoteExplorerModal extends Modal {
 
 	private renderNoteRow(treeEl: HTMLElement, note: QuickNote, depth: number) {
 		const row = treeEl.createDiv({ cls: "qnb-explorer-note-row" });
-		row.style.paddingLeft = `${depth * 18}px`;
+		row.setCssStyles({ paddingLeft: `${depth * 18}px` });
 		row.createSpan({ text: note.title || this.tr("modal.noteExplorer.untitled") });
 
 		if (note.labelIds && note.labelIds.length > 0) {
@@ -1921,7 +1922,7 @@ export class NoteExplorerModal extends Modal {
 				const label = this.plugin.settings.labels.find((l) => l.id === id);
 				if (!label) continue;
 				const dot = row.createSpan({ cls: "qnb-label-dot qnb-explorer-note-label-dot" });
-				dot.style.background = label.color || "#888888";
+				dot.setCssStyles({ background: label.color || "#888888" });
 				dot.setAttr("title", label.name);
 			}
 		}
@@ -2058,7 +2059,7 @@ function drawStructureNode(svg: SVGSVGElement, node: QnbStructureNode) {
 		line.setAttribute("y1", String(y + STRUCTURE_NODE_HEIGHT));
 		line.setAttribute("x2", String((child.x || 0) + child.width / 2));
 		line.setAttribute("y2", String(child.y || 0));
-		line.style.stroke = "var(--background-modifier-border)";
+		line.setCssStyles({ stroke: "var(--background-modifier-border)" });
 		line.setAttribute("stroke-width", "1.5");
 		svg.appendChild(line);
 	}
@@ -2070,7 +2071,7 @@ function drawStructureNode(svg: SVGSVGElement, node: QnbStructureNode) {
 	rect.setAttribute("height", String(STRUCTURE_NODE_HEIGHT));
 	rect.setAttribute("rx", "6");
 	rect.setAttribute("fill", node.color);
-	rect.style.stroke = "var(--background-modifier-border)";
+	rect.setCssStyles({ stroke: "var(--background-modifier-border)" });
 	svg.appendChild(rect);
 
 	const text = document.createElementNS(SVG_NS, "text");
@@ -2104,8 +2105,8 @@ export class BoardStructureModal extends Modal {
 	onOpen() {
 		this.plugin.playSound("dialog-board-structure");
 		this.modalEl.addClass("qnb-structure-modal-resizable");
-		this.modalEl.style.width = `${this.plugin.settings.boardStructureWindowWidth}px`;
-		this.modalEl.style.height = `${this.plugin.settings.boardStructureWindowHeight}px`;
+		this.modalEl.setCssStyles({ width: `${this.plugin.settings.boardStructureWindowWidth}px` });
+		this.modalEl.setCssStyles({ height: `${this.plugin.settings.boardStructureWindowHeight}px` });
 		this.render();
 		this.addResizeHandle();
 	}
@@ -2124,8 +2125,8 @@ export class BoardStructureModal extends Modal {
 			const onMove = (moveEvt: MouseEvent) => {
 				const newWidth = startWidth + (moveEvt.clientX - startX);
 				const newHeight = startHeight + (moveEvt.clientY - startY);
-				this.modalEl.style.width = `${Math.max(480, newWidth)}px`;
-				this.modalEl.style.height = `${Math.max(400, newHeight)}px`;
+				this.modalEl.setCssStyles({ width: `${Math.max(480, newWidth)}px` });
+				this.modalEl.setCssStyles({ height: `${Math.max(400, newHeight)}px` });
 			};
 			const onUp = async () => {
 				window.removeEventListener("mousemove", onMove);
@@ -2142,7 +2143,7 @@ export class BoardStructureModal extends Modal {
 		const { contentEl } = this;
 		contentEl.empty();
 		contentEl.addClass("qnb-structure-modal");
-		contentEl.createEl("h3", { text: this.tr("modal.boardStructure.title") });
+		new Setting(contentEl).setName(this.tr("modal.boardStructure.title")).setHeading();
 
 		const container = contentEl.createDiv({ cls: "qnb-structure-svg-container" });
 		const categories = this.plugin.settings.categories;
@@ -2216,7 +2217,7 @@ export class LabelAssignModal extends Modal {
 	private render() {
 		const { contentEl } = this;
 		contentEl.empty();
-		contentEl.createEl("h3", { text: this.tr("modal.labelAssign.title") });
+		new Setting(contentEl).setName(this.tr("modal.labelAssign.title")).setHeading();
 
 		const labels = this.plugin.settings.labels;
 		if (labels.length === 0) {
@@ -2231,7 +2232,7 @@ export class LabelAssignModal extends Modal {
 					.setName(label.name)
 					.then((setting) => {
 						const dot = createSpan({ cls: "qnb-label-dot" });
-						dot.style.background = label.color || "#888888";
+						dot.setCssStyles({ background: label.color || "#888888" });
 						setting.nameEl.prepend(dot);
 					})
 					.addToggle((toggle) =>

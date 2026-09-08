@@ -117,11 +117,10 @@ export class QuickNotesBoardView extends ItemView {
 		this.boardEl.toggleClass("qnb-icons-collapsed", this.plugin.settings.collapseNoteIcons);
 		this.boardEl.toggleClass("qnb-hover-lift-enabled", this.plugin.settings.hoverLiftEffect);
 		this.boardEl.toggleClass("qnb-always-shadow-enabled", this.plugin.settings.alwaysOnNoteShadow);
-		this.boardEl.style.setProperty(
-			"--qnb-shadow-intensity",
-			String(this.plugin.settings.noteShadowIntensity / 100)
-		);
-		this.boardEl.style.setProperty("--qnb-due-color", this.plugin.settings.dueDateBorderColor);
+		this.boardEl.setCssProps({
+			"--qnb-shadow-intensity": String(this.plugin.settings.noteShadowIntensity / 100),
+		});
+		this.boardEl.setCssProps({ "--qnb-due-color": this.plugin.settings.dueDateBorderColor });
 		this.applyBackground();
 
 		// Click sull'area vuota della board: chiude eventuali editor aperti e avvia il
@@ -170,12 +169,12 @@ export class QuickNotesBoardView extends ItemView {
 
 		// reset di base
 		this.boardEl.removeClass("qnb-board-custom-bg");
-		this.boardEl.style.backgroundImage = "";
-		this.boardEl.style.backgroundColor = "";
+		this.boardEl.setCssStyles({ backgroundImage: "" });
+		this.boardEl.setCssStyles({ backgroundColor: "" });
 
 		if (mode === "color") {
 			this.boardEl.addClass("qnb-board-custom-bg");
-			this.boardEl.style.backgroundColor = this.plugin.settings.backgroundColor;
+			this.boardEl.setCssStyles({ backgroundColor: this.plugin.settings.backgroundColor });
 			return;
 		}
 
@@ -193,22 +192,22 @@ export class QuickNotesBoardView extends ItemView {
 			// dimensioni fisse e lascerebbe "scoperte" le zone raggiunte scorrendo.
 			const dim = (this.plugin.settings.backgroundDim || 0) / 100;
 			const dimLayer = `linear-gradient(rgba(0,0,0,${dim}), rgba(0,0,0,${dim}))`;
-			this.boardEl.style.backgroundImage = `${dimLayer}, url("${resourcePath}")`;
+			this.boardEl.setCssStyles({ backgroundImage: `${dimLayer}, url("${resourcePath}")` });
 
 			if (size === "repeat") {
-				this.boardEl.style.backgroundRepeat = "repeat, repeat";
-				this.boardEl.style.backgroundSize = "64px 64px, auto";
+				this.boardEl.setCssStyles({ backgroundRepeat: "repeat, repeat" });
+				this.boardEl.setCssStyles({ backgroundSize: "64px 64px, auto" });
 			} else {
-				this.boardEl.style.backgroundRepeat = "repeat, no-repeat";
-				this.boardEl.style.backgroundSize = `64px 64px, ${size}`;
+				this.boardEl.setCssStyles({ backgroundRepeat: "repeat, no-repeat" });
+				this.boardEl.setCssStyles({ backgroundSize: `64px 64px, ${size}` });
 			}
-			this.boardEl.style.backgroundPosition = "0 0, center";
+			this.boardEl.setCssStyles({ backgroundPosition: "0 0, center" });
 			// "local": lo sfondo scorre insieme al contenuto interno, quindi copre l'intera
 			// area scorribile invece di restare ancorato solo alla porzione inizialmente visibile.
 			// Il layer di oscuramento è un piccolo tile ripetuto (non "cover"), così si estende
 			// correttamente su qualunque estensione scorribile, indipendentemente da come è
 			// impostata l'immagine.
-			this.boardEl.style.backgroundAttachment = "local, local";
+			this.boardEl.setCssStyles({ backgroundAttachment: "local, local" });
 		}
 
 		// mode === "none": resta lo sfondo predefinito a puntini definito via CSS
@@ -249,17 +248,17 @@ export class QuickNotesBoardView extends ItemView {
 			attr: { type: "button", "aria-label": this.tr("view.search.clear") },
 		});
 		setIcon(searchClearBtn, "x");
-		searchClearBtn.style.display = this.searchQuery ? "flex" : "none";
+		searchClearBtn.setCssStyles({ display: this.searchQuery ? "flex" : "none" });
 
 		searchInput.addEventListener("input", () => {
 			this.searchQuery = searchInput.value;
-			searchClearBtn.style.display = this.searchQuery ? "flex" : "none";
+			searchClearBtn.setCssStyles({ display: this.searchQuery ? "flex" : "none" });
 			this.renderBoard();
 		});
 		searchClearBtn.addEventListener("click", () => {
 			this.searchQuery = "";
 			searchInput.value = "";
-			searchClearBtn.style.display = "none";
+			searchClearBtn.setCssStyles({ display: "none" });
 			this.renderBoard();
 			searchInput.focus();
 		});
@@ -360,8 +359,8 @@ export class QuickNotesBoardView extends ItemView {
 			const catPair = categoriesRow.createDiv({ cls: "qnb-category-pair" });
 
 			const catBtn = catPair.createEl("button", { cls: "qnb-btn qnb-category-btn", text: cat.name });
-			catBtn.style.setProperty("--qnb-cat-color", cat.color);
-			catBtn.style.setProperty("--qnb-cat-fg", getContrastTextColor(cat.color));
+			catBtn.setCssProps({ "--qnb-cat-color": cat.color });
+			catBtn.setCssProps({ "--qnb-cat-fg": getContrastTextColor(cat.color) });
 			this.categoryButtons.set(cat.name, catBtn);
 			this.updateCategoryButtonState(catBtn, cat.name);
 			catBtn.addEventListener("click", async () => {
@@ -383,7 +382,7 @@ export class QuickNotesBoardView extends ItemView {
 					cls: "qnb-btn qnb-group-menu-btn",
 					attr: { type: "button", "aria-label": this.tr("view.groupsMenuLabel") },
 				});
-				groupMenuBtn.style.setProperty("--qnb-cat-color", cat.color);
+				groupMenuBtn.setCssProps({ "--qnb-cat-color": cat.color });
 				setIcon(groupMenuBtn, "chevron-down");
 				groupMenuBtn.addEventListener("click", (evt) => {
 					evt.stopPropagation();
@@ -430,16 +429,16 @@ export class QuickNotesBoardView extends ItemView {
 
 		const favorites = this.plugin.notes.filter((n) => !n.deleted && !n.archived && n.favorite);
 		if (favorites.length === 0) {
-			row.style.display = "none";
+			row.setCssStyles({ display: "none" });
 			return;
 		}
-		row.style.display = "flex";
+		row.setCssStyles({ display: "flex" });
 
 		for (const note of favorites) {
 			const chip = row.createEl("button", { cls: "qnb-favorite-chip", attr: { type: "button" } });
 			chip.toggleClass("qnb-favorite-chip-full", this.plugin.settings.favoriteChipFullTitle);
 			const catColor = this.plugin.getCategoryColor(note.category);
-			if (catColor) chip.style.setProperty("--qnb-cat-color", catColor);
+			if (catColor) chip.setCssProps({ "--qnb-cat-color": catColor });
 			setIcon(chip.createSpan({ cls: "qnb-favorite-chip-icon" }), "star");
 			chip.createSpan({ cls: "qnb-favorite-chip-title", text: note.title });
 			chip.addEventListener("click", () => void this.recallFavorite(note));
@@ -456,14 +455,14 @@ export class QuickNotesBoardView extends ItemView {
 
 		const labels = this.plugin.settings.labels;
 		if (labels.length === 0) {
-			row.style.display = "none";
+			row.setCssStyles({ display: "none" });
 			return;
 		}
-		row.style.display = "flex";
+		row.setCssStyles({ display: "flex" });
 
 		for (const label of labels) {
 			const chip = row.createEl("button", { cls: "qnb-label-chip", attr: { type: "button" } });
-			chip.style.setProperty("--qnb-label-color", label.color || "#888888");
+			chip.setCssProps({ "--qnb-label-color": label.color || "#888888" });
 			chip.toggleClass("is-active", this.activeLabelFilterIds.has(label.id));
 			chip.createSpan({ cls: "qnb-label-chip-dot" });
 			chip.createSpan({ cls: "qnb-label-chip-title", text: label.name });
@@ -626,7 +625,7 @@ export class QuickNotesBoardView extends ItemView {
 		popup.dataset.anchor = cat.name;
 		// Invisibile finché non ne misuriamo le dimensioni reali, per poterlo
 		// posizionare correttamente al primo tentativo senza un lampeggio visibile.
-		popup.style.visibility = "hidden";
+		popup.setCssStyles({ visibility: "hidden" });
 
 		for (const grp of cat.groups) {
 			this.renderGroupPopupItem(popup, cat, grp);
@@ -653,9 +652,9 @@ export class QuickNotesBoardView extends ItemView {
 			top = above >= margin ? above : Math.max(margin, viewportHeight - popupRect.height - margin);
 		}
 
-		popup.style.left = `${left}px`;
-		popup.style.top = `${top}px`;
-		popup.style.visibility = "visible";
+		popup.setCssStyles({ left: `${left}px` });
+		popup.setCssStyles({ top: `${top}px` });
+		popup.setCssStyles({ visibility: "visible" });
 
 		this.activeGroupPopup = popup;
 		doc.addEventListener("mousedown", this.closeGroupPopupOnOutsideClickBound, true);
@@ -676,7 +675,7 @@ export class QuickNotesBoardView extends ItemView {
 
 		const row = containerEl.createDiv({ cls: "qnb-group-popup-row" });
 		const item = row.createDiv({ cls: "qnb-group-popup-item" });
-		item.style.setProperty("--qnb-cat-color", cat.color);
+		item.setCssProps({ "--qnb-cat-color": cat.color });
 		item.toggleClass("is-active", anyVisible);
 		item.toggleClass("qnb-btn-disabled", !hasNotes);
 
@@ -693,7 +692,7 @@ export class QuickNotesBoardView extends ItemView {
 				evt.stopPropagation();
 				if (!childHost) return;
 				const isOpen = childHost.style.display !== "none";
-				childHost.style.display = isOpen ? "none" : "block";
+				childHost.setCssStyles({ display: isOpen ? "none" : "block" });
 				expandBtn.toggleClass("is-expanded", !isOpen);
 			});
 		} else {
@@ -718,7 +717,7 @@ export class QuickNotesBoardView extends ItemView {
 
 		if (hasChildren) {
 			childHost = row.createDiv({ cls: "qnb-group-popup-children" });
-			childHost.style.display = "none";
+			childHost.setCssStyles({ display: "none" });
 			for (const child of grp.groups) {
 				this.renderGroupPopupItem(childHost, cat, child);
 			}
@@ -988,10 +987,10 @@ export class QuickNotesBoardView extends ItemView {
 		this.marqueeStart = { x: startX, y: startY, additive };
 
 		const marquee = this.boardEl.createDiv({ cls: "qnb-marquee" });
-		marquee.style.left = `${startX}px`;
-		marquee.style.top = `${startY}px`;
-		marquee.style.width = "0px";
-		marquee.style.height = "0px";
+		marquee.setCssStyles({ left: `${startX}px` });
+		marquee.setCssStyles({ top: `${startY}px` });
+		marquee.setCssStyles({ width: "0px" });
+		marquee.setCssStyles({ height: "0px" });
 		this.marqueeEl = marquee;
 
 		let moved = false;
@@ -1005,10 +1004,10 @@ export class QuickNotesBoardView extends ItemView {
 			const width = Math.abs(curX - this.marqueeStart.x);
 			const height = Math.abs(curY - this.marqueeStart.y);
 			if (width > 3 || height > 3) moved = true;
-			this.marqueeEl.style.left = `${left}px`;
-			this.marqueeEl.style.top = `${top}px`;
-			this.marqueeEl.style.width = `${width}px`;
-			this.marqueeEl.style.height = `${height}px`;
+			this.marqueeEl.setCssStyles({ left: `${left}px` });
+			this.marqueeEl.setCssStyles({ top: `${top}px` });
+			this.marqueeEl.setCssStyles({ width: `${width}px` });
+			this.marqueeEl.setCssStyles({ height: `${height}px` });
 		};
 
 		const onUp = () => {
@@ -1247,7 +1246,7 @@ export class QuickNotesBoardView extends ItemView {
 		// Solo una proprietà CSS: nessuna mutazione dell'albero DOM, quindi non può
 		// interferire con la consegna di click/mousedown ai pulsanti della nota.
 		this.zCounter += 1;
-		noteEl.style.zIndex = String(this.zCounter);
+		noteEl.setCssStyles({ zIndex: String(this.zCounter) });
 	}
 
 	private renderNote(note: QuickNote, initialZIndex: number) {
@@ -1285,12 +1284,12 @@ export class QuickNotesBoardView extends ItemView {
 			noteEl.removeClass("qnb-hover-lifted");
 		});
 
-		noteEl.style.left = `${note.x}px`;
-		noteEl.style.top = `${note.y}px`;
-		noteEl.style.width = `${note.w}px`;
-		noteEl.style.height = `${note.h}px`;
-		noteEl.style.zIndex = String(initialZIndex);
-		noteEl.style.backgroundColor = note.bgColor || "";
+		noteEl.setCssStyles({ left: `${note.x}px` });
+		noteEl.setCssStyles({ top: `${note.y}px` });
+		noteEl.setCssStyles({ width: `${note.w}px` });
+		noteEl.setCssStyles({ height: `${note.h}px` });
+		noteEl.setCssStyles({ zIndex: String(initialZIndex) });
+		noteEl.setCssStyles({ backgroundColor: note.bgColor || "" });
 
 		if (!this.noteOrder.includes(note.id)) this.noteOrder.push(note.id);
 
@@ -1309,8 +1308,8 @@ export class QuickNotesBoardView extends ItemView {
 		const categoryColor = this.plugin.getCategoryColor(note.category);
 		if (categoryColor) {
 			header.addClass("qnb-note-header-colored");
-			header.style.backgroundColor = categoryColor;
-			header.style.setProperty("--qnb-header-fg", getContrastTextColor(categoryColor));
+			header.setCssStyles({ backgroundColor: categoryColor });
+			header.setCssProps({ "--qnb-header-fg": getContrastTextColor(categoryColor) });
 		}
 
 		const categoryIconId = this.plugin.getCategoryIcon(note.category);
@@ -1320,7 +1319,7 @@ export class QuickNotesBoardView extends ItemView {
 			catIndicator.setAttr("aria-label", note.category);
 			const explicitIconColor = this.plugin.getCategoryIconColor(note.category);
 			if (explicitIconColor) {
-				catIndicator.style.color = explicitIconColor;
+				catIndicator.setCssStyles({ color: explicitIconColor });
 			}
 		}
 
@@ -1328,7 +1327,7 @@ export class QuickNotesBoardView extends ItemView {
 		if (this.searchQuery.trim()) highlightTextInElement(titleEl, this.searchQuery.trim());
 		const explicitTitleColor = this.plugin.getCategoryTitleColor(note.category);
 		if (explicitTitleColor) {
-			titleEl.style.color = explicitTitleColor;
+			titleEl.setCssStyles({ color: explicitTitleColor });
 		}
 
 		const actions = header.createDiv({ cls: "qnb-note-actions" });
@@ -1428,28 +1427,28 @@ export class QuickNotesBoardView extends ItemView {
 						(size) => {
 							for (const t of targets) {
 								t.note.fontSize = size;
-								t.bodyEl.style.fontSize = `${size}px`;
+								t.bodyEl.setCssStyles({ fontSize: `${size}px` });
 							}
 							scheduleFontSave();
 						},
 						(fontFamily) => {
 							for (const t of targets) {
 								t.note.fontFamily = fontFamily;
-								t.bodyEl.style.fontFamily = FONT_FAMILY_CSS[fontFamily] || "";
+								t.bodyEl.setCssStyles({ fontFamily: FONT_FAMILY_CSS[fontFamily] || "" });
 							}
 							scheduleFontSave();
 						},
 						(color) => {
 							for (const t of targets) {
 								t.note.fontColor = color;
-								t.bodyEl.style.color = color || "";
+								t.bodyEl.setCssStyles({ color: color || "" });
 							}
 							scheduleFontSave();
 						},
 						(bgColor) => {
 							for (const t of targets) {
 								t.note.bgColor = bgColor;
-								t.noteEl.style.backgroundColor = bgColor || "";
+								t.noteEl.setCssStyles({ backgroundColor: bgColor || "" });
 							}
 							scheduleFontSave();
 						}
@@ -1698,9 +1697,9 @@ export class QuickNotesBoardView extends ItemView {
 
 		// Corpo: markdown renderizzato, click per modificare
 		const bodyEl = noteEl.createDiv({ cls: "qnb-note-body" });
-		bodyEl.style.fontSize = `${note.fontSize || DEFAULT_FONT_SIZE}px`;
-		bodyEl.style.fontFamily = FONT_FAMILY_CSS[note.fontFamily || DEFAULT_FONT_FAMILY] || "";
-		bodyEl.style.color = note.fontColor || "";
+		bodyEl.setCssStyles({ fontSize: `${note.fontSize || DEFAULT_FONT_SIZE}px` });
+		bodyEl.setCssStyles({ fontFamily: FONT_FAMILY_CSS[note.fontFamily || DEFAULT_FONT_FAMILY] || "" });
+		bodyEl.setCssStyles({ color: note.fontColor || "" });
 		this.renderNoteBodyPreview(bodyEl, note, noteEl, toggleModeBtn);
 
 		// Ctrl (o Cmd su Mac, dove il trackpad manda comunque ctrlKey per il pinch-to-
@@ -1725,7 +1724,7 @@ export class QuickNotesBoardView extends ItemView {
 				if (next === current) return;
 
 				note.fontSize = next;
-				bodyEl.style.fontSize = `${next}px`;
+				bodyEl.setCssStyles({ fontSize: `${next}px` });
 
 				window.clearTimeout(zoomSaveTimeout);
 				zoomSaveTimeout = window.setTimeout(() => {
@@ -1793,7 +1792,7 @@ export class QuickNotesBoardView extends ItemView {
 				const label = this.plugin.settings.labels.find((l) => l.id === id);
 				if (!label) continue; // etichetta cancellata nel frattempo: la saltiamo senza errori
 				const dot = labelsRow.createSpan({ cls: "qnb-label-dot" });
-				dot.style.background = label.color || "#888888";
+				dot.setCssStyles({ background: label.color || "#888888" });
 				dot.setAttr("aria-label", label.name);
 				dot.setAttr("title", label.name);
 			}
@@ -1875,10 +1874,10 @@ export class QuickNotesBoardView extends ItemView {
 				note.h = Math.max(MIN_H, origH + dy);
 			}
 
-			noteEl.style.width = `${note.w}px`;
-			noteEl.style.height = `${note.h}px`;
-			noteEl.style.left = `${note.x}px`;
-			noteEl.style.top = `${note.y}px`;
+			noteEl.setCssStyles({ width: `${note.w}px` });
+			noteEl.setCssStyles({ height: `${note.h}px` });
+			noteEl.setCssStyles({ left: `${note.x}px` });
+			noteEl.setCssStyles({ top: `${note.y}px` });
 		};
 
 		const onUp = async () => {
@@ -2067,7 +2066,7 @@ export class QuickNotesBoardView extends ItemView {
 		const checkboxes = renderEl.querySelectorAll<HTMLInputElement>("input.task-list-item-checkbox");
 		checkboxes.forEach((checkbox, domIndex) => {
 			checkbox.removeAttribute("disabled");
-			checkbox.style.cursor = "pointer";
+			checkbox.setCssStyles({ cursor: "pointer" });
 			const lineIndex = taskLineIndices[domIndex];
 			if (lineIndex === undefined) return;
 			checkbox.addEventListener("click", async (evt) => {
@@ -2109,7 +2108,7 @@ export class QuickNotesBoardView extends ItemView {
 				const onMove = (moveEvt: MouseEvent) => {
 					const dx = moveEvt.clientX - startX;
 					const newWidth = Math.max(50, Math.round(startWidth + dx));
-					img.style.width = `${newWidth}px`;
+					img.setCssStyles({ width: `${newWidth}px` });
 				};
 
 				const onUp = async () => {
@@ -2250,10 +2249,10 @@ export class QuickNotesBoardView extends ItemView {
 		};
 
 		const suggestEl = bodyEl.createDiv({ cls: "qnb-link-suggest" });
-		suggestEl.style.display = "none";
+		suggestEl.setCssStyles({ display: "none" });
 
 		const hideSuggestions = () => {
-			suggestEl.style.display = "none";
+			suggestEl.setCssStyles({ display: "none" });
 			suggestEl.empty();
 		};
 
@@ -2297,7 +2296,7 @@ export class QuickNotesBoardView extends ItemView {
 			if (suggestions.length === 0) return hideSuggestions();
 
 			suggestEl.empty();
-			suggestEl.style.display = "block";
+			suggestEl.setCssStyles({ display: "block" });
 			for (const suggestion of suggestions) {
 				const item = suggestEl.createDiv({ cls: "qnb-link-suggest-item" });
 				setIcon(
@@ -2442,8 +2441,8 @@ export class QuickNotesBoardView extends ItemView {
 			const newY = Math.max(0, this.dragState.origY + dy);
 			this.dragState.note.x = newX;
 			this.dragState.note.y = newY;
-			this.dragState.el.style.left = `${newX}px`;
-			this.dragState.el.style.top = `${newY}px`;
+			this.dragState.el.setCssStyles({ left: `${newX}px` });
+			this.dragState.el.setCssStyles({ top: `${newY}px` });
 
 			// Trascinamento di gruppo: stessa quantità di spostamento per tutte le altre
 			// note selezionate, ognuna dalla propria posizione di partenza.
@@ -2452,8 +2451,8 @@ export class QuickNotesBoardView extends ItemView {
 				const exY = Math.max(0, extra.origY + dy);
 				extra.note.x = exX;
 				extra.note.y = exY;
-				extra.el.style.left = `${exX}px`;
-				extra.el.style.top = `${exY}px`;
+				extra.el.setCssStyles({ left: `${exX}px` });
+				extra.el.setCssStyles({ top: `${exY}px` });
 			}
 		};
 
@@ -2573,13 +2572,13 @@ function insertChecklistProgressBars(
 
 		const track = document.createElement("div");
 		track.className = "qnb-checklist-progress-track";
-		track.style.height = `${heightPx}px`;
-		track.style.setProperty("--qnb-checklist-progress-start", colorStart);
-		track.style.setProperty("--qnb-checklist-progress-end", colorEnd);
+		track.setCssStyles({ height: `${heightPx}px` });
+		track.setCssProps({ "--qnb-checklist-progress-start": colorStart });
+		track.setCssProps({ "--qnb-checklist-progress-end": colorEnd });
 
 		const fill = document.createElement("div");
 		fill.className = "qnb-checklist-progress-fill";
-		fill.style.width = `${percent}%`;
+		fill.setCssStyles({ width: `${percent}%` });
 
 		// Etichetta dentro la barra, centrata sull'intera larghezza (non solo sulla
 		// parte riempita), così resta sempre leggibile e al centro qualunque percentuale.
@@ -2592,7 +2591,7 @@ function insertChecklistProgressBars(
 			// 100% raggiunto, e solo dopo i secondi configurati sostituisce colore e
 			// testo — altrimenti il cambio è troppo brusco, come segnalato.
 			const applyCompleteState = () => {
-				fill.style.background = completeColor;
+				fill.setCssStyles({ background: completeColor });
 				label.textContent = completeText;
 			};
 			if (completeDelaySeconds > 0) {

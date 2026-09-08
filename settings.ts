@@ -394,7 +394,7 @@ export class QuickNotesBoardSettingTab extends PluginSettingTab {
 		const { containerEl } = this;
 		containerEl.empty();
 
-		containerEl.createEl("h2", { text: this.tr("settings.title") });
+		new Setting(containerEl).setName(this.tr("settings.title")).setHeading();
 
 		new Setting(containerEl)
 			.setName(this.tr("settings.language.name"))
@@ -428,7 +428,7 @@ export class QuickNotesBoardSettingTab extends PluginSettingTab {
 				})
 			);
 
-		containerEl.createEl("h3", { text: this.tr("settings.noteIconOrder.heading") });
+		new Setting(containerEl).setName(this.tr("settings.noteIconOrder.heading")).setHeading();
 		containerEl.createEl("p", {
 			cls: "setting-item-description",
 			text: this.tr("settings.noteIconOrder.intro"),
@@ -498,7 +498,7 @@ export class QuickNotesBoardSettingTab extends PluginSettingTab {
 		};
 		renderIconList();
 
-		containerEl.createEl("h3", { text: this.tr("settings.labels.heading") });
+		new Setting(containerEl).setName(this.tr("settings.labels.heading")).setHeading();
 		containerEl.createEl("p", {
 			cls: "setting-item-description",
 			text: this.tr("settings.labels.intro"),
@@ -780,7 +780,7 @@ export class QuickNotesBoardSettingTab extends PluginSettingTab {
 		};
 		renderShadowSettings();
 
-		containerEl.createEl("h3", { text: this.tr("settings.activityChart.heading") });
+		new Setting(containerEl).setName(this.tr("settings.activityChart.heading")).setHeading();
 
 		let notesColorPicker: ColorComponent | null = null;
 		const notesColorRow = new Setting(containerEl).setName(this.tr("settings.activityChart.notesColor"));
@@ -943,7 +943,7 @@ export class QuickNotesBoardSettingTab extends PluginSettingTab {
 		const render = () => {
 			wrapper.empty();
 
-			wrapper.createEl("h3", { text: this.tr("settings.categories.heading") });
+			new Setting(wrapper).setName(this.tr("settings.categories.heading")).setHeading();
 			wrapper.createEl("p", {
 				cls: "setting-item-description",
 				text: this.tr("settings.categories.desc"),
@@ -1007,7 +1007,7 @@ export class QuickNotesBoardSettingTab extends PluginSettingTab {
 
 				const isCollapsed = this.collapsedCategories.has(cat.name);
 				const body = card.createDiv({ cls: "qnb-category-body" });
-				body.style.display = isCollapsed ? "none" : "block";
+				body.setCssStyles({ display: isCollapsed ? "none" : "block" });
 
 				let collapseBtnComponent: ButtonComponent | null = null;
 				header.addButton((btn) => {
@@ -1017,7 +1017,7 @@ export class QuickNotesBoardSettingTab extends PluginSettingTab {
 						.setTooltip(this.tr("settings.categories.collapseTooltip"))
 						.onClick(() => {
 							const nowCollapsed = body.style.display !== "none";
-							body.style.display = nowCollapsed ? "none" : "block";
+							body.setCssStyles({ display: nowCollapsed ? "none" : "block" });
 							if (nowCollapsed) this.collapsedCategories.add(cat.name);
 							else this.collapsedCategories.delete(cat.name);
 							collapseBtnComponent?.setIcon(nowCollapsed ? "chevron-right" : "chevron-down");
@@ -1133,7 +1133,7 @@ export class QuickNotesBoardSettingTab extends PluginSettingTab {
 			};
 			for (const hex of COLOR_PALETTE) {
 				const swatch = addPaletteEl.createDiv({ cls: "qnb-color-swatch" });
-				swatch.style.backgroundColor = hex;
+				swatch.setCssStyles({ backgroundColor: hex });
 				if (hex.toLowerCase() === this.pendingCategoryColor.toLowerCase()) {
 					swatch.addClass("is-selected");
 				}
@@ -1227,7 +1227,7 @@ export class QuickNotesBoardSettingTab extends PluginSettingTab {
 		}).addEventListener("click", () => void applyCustom());
 
 		// Colore dell'icona: si applica sia alle icone rapide sia a quella custom.
-		previewEl.style.color = cat.iconColor || "";
+		previewEl.setCssStyles({ color: cat.iconColor || "" });
 		const colorRow = wrapper.createDiv({ cls: "qnb-icon-picker-color-row" });
 		colorRow.createSpan({ cls: "qnb-icon-picker-color-label", text: this.tr("settings.categories.iconColorLabel") });
 		const colorInput = colorRow.createEl("input", {
@@ -1236,7 +1236,7 @@ export class QuickNotesBoardSettingTab extends PluginSettingTab {
 		});
 		colorInput.value = cat.iconColor || "#ffffff";
 		colorInput.addEventListener("input", () => {
-			previewEl.style.color = colorInput.value;
+			previewEl.setCssStyles({ color: colorInput.value });
 		});
 		colorInput.addEventListener("change", async () => {
 			cat.iconColor = colorInput.value;
@@ -1250,7 +1250,7 @@ export class QuickNotesBoardSettingTab extends PluginSettingTab {
 			cat.iconColor = "";
 			await this.plugin.updateCategoryIconColor(cat.name, "");
 			colorInput.value = "#ffffff";
-			previewEl.style.color = "";
+			previewEl.setCssStyles({ color: "" });
 		});
 
 		const hintRow = wrapper.createDiv({ cls: "qnb-icon-picker-hint-row" });
@@ -1440,12 +1440,12 @@ export class QuickNotesBoardSettingTab extends PluginSettingTab {
 		toggleBtn.createSpan({ text: label });
 
 		const contentHost = wrapper.createDiv({ cls: "qnb-groups-collapsed-content" });
-		contentHost.style.display = "none";
+		contentHost.setCssStyles({ display: "none" });
 		let expanded = false;
 
 		toggleBtn.addEventListener("click", () => {
 			expanded = !expanded;
-			contentHost.style.display = expanded ? "block" : "none";
+			contentHost.setCssStyles({ display: expanded ? "block" : "none" });
 			toggleBtn.toggleClass("is-expanded", expanded);
 			if (expanded) {
 				contentHost.empty();
@@ -1461,7 +1461,7 @@ export class QuickNotesBoardSettingTab extends PluginSettingTab {
 	}
 
 	private buildSoundsSection(containerEl: HTMLElement) {
-		containerEl.createEl("h3", { text: this.tr("settings.sounds.heading") });
+		new Setting(containerEl).setName(this.tr("settings.sounds.heading")).setHeading();
 		containerEl.createEl("p", {
 			cls: "setting-item-description",
 			text: this.tr("settings.sounds.desc"),
@@ -1657,7 +1657,7 @@ export class QuickNotesBoardSettingTab extends PluginSettingTab {
 			const swatches: HTMLElement[] = [];
 			for (const hex of COLOR_PALETTE) {
 				const swatch = paletteEl.createDiv({ cls: "qnb-color-swatch" });
-				swatch.style.backgroundColor = hex;
+				swatch.setCssStyles({ backgroundColor: hex });
 				if (hex.toLowerCase() === this.plugin.settings.backgroundColor.toLowerCase()) {
 					swatch.addClass("is-selected");
 				}
@@ -1747,11 +1747,11 @@ export class QuickNotesBoardSettingTab extends PluginSettingTab {
 		input.accept = "image/png,image/jpeg,image/webp,image/gif";
 		// display:none impedisce ad alcuni ambienti Electron/Chromium di aprire il dialogo
 		// file quando si chiama .click() da codice: l'elemento resta "renderizzato" ma invisibile.
-		input.style.position = "fixed";
-		input.style.top = "-1000px";
-		input.style.left = "-1000px";
-		input.style.opacity = "0";
-		input.style.pointerEvents = "none";
+		input.setCssStyles({ position: "fixed" });
+		input.setCssStyles({ top: "-1000px" });
+		input.setCssStyles({ left: "-1000px" });
+		input.setCssStyles({ opacity: "0" });
+		input.setCssStyles({ pointerEvents: "none" });
 
 		input.addEventListener("change", async () => {
 			const file = input.files?.[0];
