@@ -370,6 +370,32 @@ const COLOR_PALETTE = [
 	"#e5e5e5", "#d6c9b8", "#f5deb3", "#ffffff",
 ];
 
+interface ElectronOpenDialogResult {
+	canceled: boolean;
+	filePaths: string[];
+}
+interface ElectronDialog {
+	showOpenDialog: (options: {
+		title: string;
+		properties: string[];
+		filters: { name: string; extensions: string[] }[];
+	}) => Promise<ElectronOpenDialogResult>;
+}
+interface ElectronModule {
+	remote?: { dialog?: ElectronDialog };
+	dialog?: ElectronDialog;
+}
+/** Solo le proprietà che leggiamo davvero da un Buffer Node, per non dipendere dai tipi
+ * di @types/node (il resto del progetto non ne ha bisogno). */
+interface NodeBufferLike {
+	buffer: ArrayBufferLike;
+	byteOffset: number;
+	byteLength: number;
+}
+interface NodeFsModule {
+	readFileSync: (path: string) => NodeBufferLike;
+}
+
 export class QuickNotesBoardSettingTab extends PluginSettingTab {
 	plugin: QuickNotesBoardPlugin;
 	private pendingCategoryName = "";
@@ -1464,7 +1490,7 @@ export class QuickNotesBoardSettingTab extends PluginSettingTab {
 		new Setting(containerEl).setName(this.tr("settings.sounds.heading")).setHeading();
 		containerEl.createEl("p", {
 			cls: "setting-item-description",
-			text: this.tr("settings.sounds.desc"),
+			text: this.tr("settings.sounds.desc", { configDir: this.app.vault.configDir }),
 		});
 
 		const listContainer = containerEl.createDiv();
@@ -1476,8 +1502,6 @@ export class QuickNotesBoardSettingTab extends PluginSettingTab {
 		const dirPath = this.plugin.manifest.dir ?? "";
 		try {
 			const listing = await this.app.vault.adapter.list(dirPath);
-			console.log("Quick Notes Board: cartella controllata per i suoni:", dirPath);
-			console.log("Quick Notes Board: file trovati nella cartella:", listing.files);
 			const files = listing.files
 				.map((f) => f.split("/").pop() || f)
 				.filter((name) => {
@@ -1485,10 +1509,8 @@ export class QuickNotesBoardSettingTab extends PluginSettingTab {
 					return !!ext && ACCEPTED_SOUND_EXTENSIONS.includes(ext);
 				})
 				.sort((a, b) => a.localeCompare(b));
-			console.log("Quick Notes Board: file audio riconosciuti:", files);
 			return { files, dirPath, error: false };
-		} catch (e) {
-			console.error("Quick Notes Board: errore nella lettura della cartella", dirPath, e);
+		} catch {
 			return { files: [], dirPath, error: true };
 		}
 	}
@@ -1681,7 +1703,7 @@ export class QuickNotesBoardSettingTab extends PluginSettingTab {
 	 * se non disponibile (es. mobile), ricade su un <input type="file"> HTML.
 	 */
 	private async pickImage(onDone: () => void) {
-		const win = window as unknown as { require?: (moduleName: string) => any };
+		const win = window as unknown as { require?: (moduleName: string) => unknown };
 
 		if (typeof win.require === "function") {
 			try {
@@ -1697,12 +1719,12 @@ export class QuickNotesBoardSettingTab extends PluginSettingTab {
 
 	/** Ritorna true se il dialogo è stato gestito (scelto un file o annullato esplicitamente). */
 	private async pickImageViaElectron(
-		nodeRequire: (moduleName: string) => any,
+		nodeRequire: (moduleName: string) => unknown,
 		onDone: () => void
 	): Promise<boolean> {
-		const electron = nodeRequire("electron");
+		const electron = nodeRequire("electron") as ElectronModule | undefined;
 		const dialog = electron?.remote?.dialog ?? electron?.dialog;
-		const fs = nodeRequire("fs");
+		const fs = nodeRequire("fs") as NodeFsModule | undefined;
 
 		if (!dialog || !fs) return false;
 
@@ -1742,9 +1764,12 @@ export class QuickNotesBoardSettingTab extends PluginSettingTab {
 	}
 
 	private pickImageViaHtmlInput(onDone: () => void) {
-		const input = document.createElement("input");
-		input.type = "file";
-		input.accept = "image/png,image/jpeg,image/webp,image/gif";
+		const input = document.body.createEl("input", {
+			attr: {
+				type: "file",
+				accept: "image/png,image/jpeg,image/webp,image/gif",
+			},
+		});
 		// display:none impedisce ad alcuni ambienti Electron/Chromium di aprire il dialogo
 		// file quando si chiama .click() da codice: l'elemento resta "renderizzato" ma invisibile.
 		input.setCssStyles({ position: "fixed" });
@@ -1775,7 +1800,6 @@ export class QuickNotesBoardSettingTab extends PluginSettingTab {
 			}
 		});
 
-		document.body.appendChild(input);
 		input.click();
 	}
 }

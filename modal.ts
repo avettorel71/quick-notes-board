@@ -374,10 +374,8 @@ export class FontSizeModal extends Modal {
  * se la categoria non ne ha una impostata). */
 function buildNoteTitleWithIcon(plugin: QuickNotesBoardPlugin, note: QuickNote): DocumentFragment {
 	const frag = document.createDocumentFragment();
-	const iconSpan = document.createElement("span");
-	iconSpan.className = "qnb-list-item-icon";
+	const iconSpan = frag.createSpan({ cls: "qnb-list-item-icon" });
 	setIcon(iconSpan, plugin.getCategoryIcon(note.category) || "file-text");
-	frag.appendChild(iconSpan);
 	frag.appendChild(document.createTextNode(note.title));
 	return frag;
 }
@@ -2046,7 +2044,6 @@ function structureMaxDepth(node: QnbStructureNode, depth = 0): number {
 	return Math.max(...node.children.map((c) => structureMaxDepth(c, depth + 1)));
 }
 
-const SVG_NS = "http://www.w3.org/2000/svg";
 const STRUCTURE_NODE_HEIGHT = 40;
 
 function drawStructureNode(svg: SVGSVGElement, node: QnbStructureNode) {
@@ -2054,34 +2051,40 @@ function drawStructureNode(svg: SVGSVGElement, node: QnbStructureNode) {
 	const y = node.y || 0;
 
 	for (const child of node.children) {
-		const line = document.createElementNS(SVG_NS, "line");
-		line.setAttribute("x1", String(x + node.width / 2));
-		line.setAttribute("y1", String(y + STRUCTURE_NODE_HEIGHT));
-		line.setAttribute("x2", String((child.x || 0) + child.width / 2));
-		line.setAttribute("y2", String(child.y || 0));
+		const line = svg.createSvg("line", {
+			attr: {
+				x1: String(x + node.width / 2),
+				y1: String(y + STRUCTURE_NODE_HEIGHT),
+				x2: String((child.x || 0) + child.width / 2),
+				y2: String(child.y || 0),
+				"stroke-width": "1.5",
+			},
+		});
 		line.setCssStyles({ stroke: "var(--background-modifier-border)" });
-		line.setAttribute("stroke-width", "1.5");
-		svg.appendChild(line);
 	}
 
-	const rect = document.createElementNS(SVG_NS, "rect");
-	rect.setAttribute("x", String(x));
-	rect.setAttribute("y", String(y));
-	rect.setAttribute("width", String(node.width));
-	rect.setAttribute("height", String(STRUCTURE_NODE_HEIGHT));
-	rect.setAttribute("rx", "6");
-	rect.setAttribute("fill", node.color);
+	const rect = svg.createSvg("rect", {
+		attr: {
+			x: String(x),
+			y: String(y),
+			width: String(node.width),
+			height: String(STRUCTURE_NODE_HEIGHT),
+			rx: "6",
+			fill: node.color,
+		},
+	});
 	rect.setCssStyles({ stroke: "var(--background-modifier-border)" });
-	svg.appendChild(rect);
 
-	const text = document.createElementNS(SVG_NS, "text");
-	text.setAttribute("x", String(x + node.width / 2));
-	text.setAttribute("y", String(y + STRUCTURE_NODE_HEIGHT / 2 + 5));
-	text.setAttribute("text-anchor", "middle");
-	text.setAttribute("font-size", "13");
-	text.setAttribute("fill", node.textColor);
+	const text = svg.createSvg("text", {
+		attr: {
+			x: String(x + node.width / 2),
+			y: String(y + STRUCTURE_NODE_HEIGHT / 2 + 5),
+			"text-anchor": "middle",
+			"font-size": "13",
+			fill: node.textColor,
+		},
+	});
 	text.textContent = node.label;
-	svg.appendChild(text);
 
 	for (const child of node.children) drawStructureNode(svg, child);
 }
@@ -2169,14 +2172,16 @@ export class BoardStructureModal extends Modal {
 			const maxDepth = Math.max(...roots.map((r) => structureMaxDepth(r)));
 			const totalHeight = (maxDepth + 1) * STRUCTURE_NODE_HEIGHT + maxDepth * VGAP;
 
-			const svg = document.createElementNS(SVG_NS, "svg") as SVGSVGElement;
 			const pad = 20;
-			svg.setAttribute("width", String(totalWidth + pad * 2));
-			svg.setAttribute("height", String(totalHeight + pad * 2));
-			svg.setAttribute("viewBox", `${-pad} ${-pad} ${totalWidth + pad * 2} ${totalHeight + pad * 2}`);
+			const svg = container.createSvg("svg", {
+				attr: {
+					width: String(totalWidth + pad * 2),
+					height: String(totalHeight + pad * 2),
+					viewBox: `${-pad} ${-pad} ${totalWidth + pad * 2} ${totalHeight + pad * 2}`,
+				},
+			}) as SVGSVGElement;
 
 			for (const root of roots) drawStructureNode(svg, root);
-			container.appendChild(svg);
 		}
 
 		new Setting(contentEl).addButton((btn) =>

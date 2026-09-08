@@ -215,15 +215,27 @@ function generateGroupId(): string {
 	return GROUP_ID_PREFIX + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 }
 
+/** Legge un valore di provenienza sconosciuta (dati salvati, potenzialmente da una
+ * versione precedente o modificati a mano) come un oggetto semplice, senza mai
+ * assumerne la forma: un oggetto vuoto se non lo è davvero. Ogni proprietà letta da qui
+ * resta "unknown" finché non viene controllata esplicitamente (typeof/Array.isArray),
+ * invece di propagare "any" nel resto del codice. */
+function asRecord(value: unknown): Record<string, unknown> {
+	return typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {};
+}
+
 /** Completa ricorsivamente i gruppi caricati da versioni precedenti (senza id o
  * senza array "groups"), senza mai perdere quelli già validi. */
 function normalizeGroups(raw: unknown): QnbGroup[] {
 	if (!Array.isArray(raw)) return [];
-	return raw.map((g) => ({
-		id: typeof g?.id === "string" && g.id ? g.id : generateGroupId(),
-		name: typeof g?.name === "string" ? g.name : "",
-		groups: normalizeGroups(g?.groups),
-	}));
+	return (raw as unknown[]).map((item) => {
+		const g = asRecord(item);
+		return {
+			id: typeof g.id === "string" && g.id ? g.id : generateGroupId(),
+			name: typeof g.name === "string" ? g.name : "",
+			groups: normalizeGroups(g.groups),
+		};
+	});
 }
 
 const KNOWN_NOTE_ICON_IDS = new Set<string>(DEFAULT_NOTE_ICON_ORDER.map((cfg) => cfg.id));
@@ -236,11 +248,12 @@ function normalizeNoteIconOrder(raw: unknown): QnbNoteIconConfig[] {
 	const result: QnbNoteIconConfig[] = [];
 	const seen = new Set<string>();
 	if (Array.isArray(raw)) {
-		for (const entry of raw) {
-			const id = entry?.id;
+		for (const item of raw as unknown[]) {
+			const entry = asRecord(item);
+			const id = entry.id;
 			if (typeof id === "string" && KNOWN_NOTE_ICON_IDS.has(id) && !seen.has(id)) {
 				seen.add(id);
-				result.push({ id: id as QnbNoteIconId, visible: entry?.visible !== false });
+				result.push({ id: id as QnbNoteIconId, visible: entry.visible !== false });
 			}
 		}
 	}
@@ -253,6 +266,14 @@ function normalizeNoteIconOrder(raw: unknown): QnbNoteIconConfig[] {
 const DATA_FILE_NAME = "Quick notes board.md";
 const DEFAULT_CATEGORY = "Generale";
 const BACKGROUND_BASENAME = "board-background";
+
+/** Forma del file dati del plugin (data.json), per evitare che il tipo "any" restituito
+ * da loadData()/saveData() dell'API Obsidian si propaghi in giro nel codice: un unico
+ * cast esplicito al confine, invece di lasciarlo implicito ovunque. */
+interface QnbPluginDataFile {
+	settings?: Record<string, unknown>;
+	[key: string]: unknown;
+}
 
 export default class QuickNotesBoardPlugin extends Plugin {
 	notes: QuickNote[] = [];
@@ -289,13 +310,13 @@ export default class QuickNotesBoardPlugin extends Plugin {
 		this.addSettingTab(new QuickNotesBoardSettingTab(this.app, this));
 
 		this.addRibbonIcon("layout-dashboard", this.tr("ribbon.open"), () => {
-			this.activateView();
+			void this.activateView();
 		});
 
 		this.addCommand({
-			id: "open-quick-notes-board",
+			id: "open-board",
 			name: this.tr("command.open"),
-			callback: () => this.activateView(),
+			callback: () => void this.activateView(),
 		});
 
 		// Avvisi di scadenza: girano a livello di plugin (non della vista), così
@@ -329,11 +350,11 @@ export default class QuickNotesBoardPlugin extends Plugin {
 	}
 
 	async loadSettings() {
-		const data = (await this.loadData()) || {};
+		const data = ((await this.loadData()) as QnbPluginDataFile | null) || {};
 		const stored: Partial<QuickNotesBoardSettings> & {
 			deleteSoundFileName?: string;
 			minimizeSoundFileName?: string;
-		} = data.settings || {};
+		} = (data.settings as typeof stored) || {};
 		const rawCategories =
 			stored.categories && stored.categories.length > 0
 				? stored.categories
@@ -369,8 +390,8 @@ export default class QuickNotesBoardPlugin extends Plugin {
 	}
 
 	async saveSettings() {
-		const data = (await this.loadData()) || {};
-		data.settings = this.settings;
+		const data = ((await this.loadData()) as QnbPluginDataFile | null) || {};
+		data.settings = this.settings as unknown as Record<string, unknown>;
 		await this.saveData(data);
 	}
 

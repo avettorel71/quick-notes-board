@@ -426,26 +426,26 @@
 	max-width: 420px;
 }
 
-.qnb-icon-picker-btn {
-	display: flex !important;
+.qnb-icon-picker-btn.qnb-icon-picker-btn {
+	display: flex;
 	align-items: center;
 	justify-content: center;
 	width: 30px;
 	height: 30px;
-	padding: 0 !important;
+	padding: 0;
 	border-radius: 6px;
 	border: 2px solid var(--background-modifier-border);
 	background: var(--background-primary);
-	color: var(--text-normal) !important;
+	color: var(--text-normal);
 	cursor: pointer;
 	box-shadow: none;
 }
 
-.qnb-icon-picker-btn svg {
-	width: 16px !important;
-	height: 16px !important;
-	stroke: currentColor !important;
-	fill: none !important;
+.qnb-icon-picker-btn.qnb-icon-picker-btn svg {
+	width: 16px;
+	height: 16px;
+	stroke: currentColor;
+	fill: none;
 	pointer-events: none;
 }
 
@@ -453,10 +453,10 @@
 	border-color: var(--interactive-accent);
 }
 
-.qnb-icon-picker-btn.is-selected {
+.qnb-icon-picker-btn.is-selected.is-selected {
 	border-color: var(--interactive-accent);
 	box-shadow: 0 0 0 2px var(--interactive-accent);
-	color: var(--interactive-accent) !important;
+	color: var(--interactive-accent);
 }
 
 .qnb-icon-picker-custom {
@@ -467,8 +467,8 @@
 	max-width: 420px;
 }
 
-.qnb-icon-picker-custom-preview {
-	display: flex !important;
+.qnb-icon-picker-custom-preview.qnb-icon-picker-custom-preview {
+	display: flex;
 	align-items: center;
 	justify-content: center;
 	width: 30px;
@@ -476,14 +476,14 @@
 	flex-shrink: 0;
 	border-radius: 6px;
 	border: 2px dashed var(--background-modifier-border);
-	color: var(--text-normal) !important;
+	color: var(--text-normal);
 }
 
-.qnb-icon-picker-custom-preview svg {
-	width: 16px !important;
-	height: 16px !important;
-	stroke: currentColor !important;
-	fill: none !important;
+.qnb-icon-picker-custom-preview.qnb-icon-picker-custom-preview svg {
+	width: 16px;
+	height: 16px;
+	stroke: currentColor;
+	fill: none;
 }
 
 .qnb-icon-picker-custom-input {
@@ -567,6 +567,10 @@
 
 .qnb-note {
 	position: absolute;
+	left: var(--qnb-note-x, 0);
+	top: var(--qnb-note-y, 0);
+	width: var(--qnb-note-w, 320px);
+	height: var(--qnb-note-h, 200px);
 	min-width: 180px;
 	min-height: 120px;
 	background: var(--background-primary);
@@ -833,20 +837,20 @@
 	min-height: 380px;
 }
 
-.qnb-note-rendered table {
+.qnb-note-rendered.qnb-note-rendered table {
 	display: block;
 	max-width: 100%;
 	overflow-x: auto;
 	border-collapse: collapse;
-	font-size: 1em !important;
+	font-size: 1em;
 }
 
-.qnb-note-rendered th,
-.qnb-note-rendered td {
+.qnb-note-rendered.qnb-note-rendered th,
+.qnb-note-rendered.qnb-note-rendered td {
 	border: 1px solid var(--background-modifier-border);
 	padding: 4px 8px;
 	white-space: nowrap;
-	font-size: 1em !important;
+	font-size: 1em;
 }
 
 .qnb-note-rendered th {
@@ -869,15 +873,15 @@
 	padding-left: 0;
 }
 
-/* "static !important" forza la checkbox a comportarsi come un normale elemento in linea
+/* "position: static" forza la checkbox a comportarsi come un normale elemento in linea
    col testo, invece di affidarsi al posizionamento assoluto che Obsidian calcola per la
    vista di lettura a piena larghezza (che in una card stretta finisce fuori posto). */
-.qnb-note-rendered .task-list-item-checkbox {
-	position: static !important;
+.qnb-note-rendered.qnb-note-rendered .task-list-item-checkbox {
+	position: static;
 	display: inline-block;
 	vertical-align: middle;
-	margin: 0 0.4em 0 0 !important;
-	inset: auto !important;
+	margin: 0 0.4em 0 0;
+	inset: auto;
 	cursor: pointer;
 }
 
@@ -969,10 +973,10 @@
 	box-shadow: inset 0 2px 0 var(--interactive-accent);
 }
 
-.qnb-category-header {
+.qnb-category-header.qnb-category-header {
 	position: relative;
 	padding-left: 28px;
-	border: none !important;
+	border: none;
 }
 
 .qnb-category-body {
@@ -1396,16 +1400,22 @@
 }
 
 .qnb-alarm-grid {
-	display: grid;
-	grid-template-columns: auto 1fr 1.5fr auto auto auto;
-	gap: 4px 14px;
+	display: table;
+	width: 100%;
+	border-collapse: collapse;
 	margin: 12px 0;
 	max-height: 60vh;
 	overflow-y: auto;
 }
 
 .qnb-alarm-grid-row {
-	display: contents;
+	display: table-row;
+}
+
+.qnb-alarm-grid-row > div {
+	display: table-cell;
+	padding: 6px 14px 6px 0;
+	border-bottom: 1px solid var(--background-modifier-border);
 }
 
 .qnb-alarm-grid-header > div {
@@ -1420,24 +1430,20 @@
 	cursor: pointer;
 }
 
-.qnb-alarm-grid-item > div {
-	padding: 6px 0;
-	border-bottom: 1px solid var(--background-modifier-border);
-}
-
 .qnb-alarm-grid-item:hover > div {
 	background: var(--background-modifier-hover);
 }
 
 .qnb-alarm-cell-category {
-	display: flex;
-	align-items: center;
-	gap: 6px;
+	white-space: nowrap;
 }
 
 .qnb-alarm-cat-dot {
+	display: inline-block;
+	vertical-align: middle;
 	width: 9px;
 	height: 9px;
+	margin-right: 6px;
 	border-radius: 50%;
 	background: var(--interactive-accent);
 	flex-shrink: 0;
@@ -1461,10 +1467,10 @@
 }
 
 .qnb-note.qnb-note-maximized {
-	position: absolute !important;
-	inset: 14px !important;
-	width: auto !important;
-	height: auto !important;
+	position: absolute;
+	inset: 14px;
+	width: auto;
+	height: auto;
 	z-index: 3000;
 }
 

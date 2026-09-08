@@ -504,7 +504,7 @@ export class QuickNotesBoardView extends ItemView {
 		this.refreshVisibilityButtons();
 		this.renderBoard();
 
-		requestAnimationFrame(() => {
+		window.requestAnimationFrame(() => {
 			const el = this.noteElements.get(note.id);
 			if (!el) return;
 			el.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
@@ -536,7 +536,7 @@ export class QuickNotesBoardView extends ItemView {
 		this.refreshVisibilityButtons();
 		this.renderBoard();
 
-		requestAnimationFrame(() => {
+		window.requestAnimationFrame(() => {
 			const el = this.noteElements.get(target.id);
 			if (!el) return;
 			el.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
@@ -565,7 +565,7 @@ export class QuickNotesBoardView extends ItemView {
 		this.renderBoard();
 		if (needsSave) void this.plugin.saveNotes();
 
-		requestAnimationFrame(() => {
+		window.requestAnimationFrame(() => {
 			const el = this.noteElements.get(target.id);
 			if (!el) return;
 			el.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
@@ -1284,10 +1284,10 @@ export class QuickNotesBoardView extends ItemView {
 			noteEl.removeClass("qnb-hover-lifted");
 		});
 
-		noteEl.setCssStyles({ left: `${note.x}px` });
-		noteEl.setCssStyles({ top: `${note.y}px` });
-		noteEl.setCssStyles({ width: `${note.w}px` });
-		noteEl.setCssStyles({ height: `${note.h}px` });
+		noteEl.setCssProps({ "--qnb-note-x": `${note.x}px` });
+		noteEl.setCssProps({ "--qnb-note-y": `${note.y}px` });
+		noteEl.setCssProps({ "--qnb-note-w": `${note.w}px` });
+		noteEl.setCssProps({ "--qnb-note-h": `${note.h}px` });
 		noteEl.setCssStyles({ zIndex: String(initialZIndex) });
 		noteEl.setCssStyles({ backgroundColor: note.bgColor || "" });
 
@@ -1874,10 +1874,10 @@ export class QuickNotesBoardView extends ItemView {
 				note.h = Math.max(MIN_H, origH + dy);
 			}
 
-			noteEl.setCssStyles({ width: `${note.w}px` });
-			noteEl.setCssStyles({ height: `${note.h}px` });
-			noteEl.setCssStyles({ left: `${note.x}px` });
-			noteEl.setCssStyles({ top: `${note.y}px` });
+			noteEl.setCssProps({ "--qnb-note-w": `${note.w}px` });
+			noteEl.setCssProps({ "--qnb-note-h": `${note.h}px` });
+			noteEl.setCssProps({ "--qnb-note-x": `${note.x}px` });
+			noteEl.setCssProps({ "--qnb-note-y": `${note.y}px` });
 		};
 
 		const onUp = async () => {
@@ -2567,24 +2567,22 @@ function insertChecklistProgressBars(
 		const percent = Math.round((checked / total) * 100);
 		const isComplete = checked === total;
 
-		const bar = document.createElement("div");
-		bar.className = "qnb-checklist-progress";
+		const bar = createDiv({ cls: "qnb-checklist-progress" });
 
-		const track = document.createElement("div");
-		track.className = "qnb-checklist-progress-track";
+		const track = bar.createDiv({ cls: "qnb-checklist-progress-track" });
 		track.setCssStyles({ height: `${heightPx}px` });
 		track.setCssProps({ "--qnb-checklist-progress-start": colorStart });
 		track.setCssProps({ "--qnb-checklist-progress-end": colorEnd });
 
-		const fill = document.createElement("div");
-		fill.className = "qnb-checklist-progress-fill";
+		const fill = track.createDiv({ cls: "qnb-checklist-progress-fill" });
 		fill.setCssStyles({ width: `${percent}%` });
 
 		// Etichetta dentro la barra, centrata sull'intera larghezza (non solo sulla
 		// parte riempita), così resta sempre leggibile e al centro qualunque percentuale.
-		const label = document.createElement("span");
-		label.className = "qnb-checklist-progress-label";
-		label.textContent = `${checked}/${total} — ${percent}%`;
+		const label = track.createSpan({
+			cls: "qnb-checklist-progress-label",
+			text: `${checked}/${total} — ${percent}%`,
+		});
 
 		if (isComplete) {
 			// Non passa subito al colore/testo "completo": mostra prima normalmente il
@@ -2601,9 +2599,6 @@ function insertChecklistProgressBars(
 			}
 		}
 
-		track.appendChild(fill);
-		track.appendChild(label);
-		bar.appendChild(track);
 		list.insertAdjacentElement("afterend", bar);
 	});
 }
@@ -2638,10 +2633,10 @@ function highlightTextInElement(root: HTMLElement, query: string) {
 		let idx = lower.indexOf(q);
 		while (idx !== -1) {
 			if (idx > lastIndex) frag.appendChild(document.createTextNode(value.slice(lastIndex, idx)));
-			const mark = document.createElement("mark");
-			mark.className = "qnb-search-highlight";
-			mark.textContent = value.slice(idx, idx + q.length);
-			frag.appendChild(mark);
+			const mark = frag.createEl("mark", {
+				cls: "qnb-search-highlight",
+				text: value.slice(idx, idx + q.length),
+			});
 			lastIndex = idx + q.length;
 			idx = lower.indexOf(q, lastIndex);
 		}
