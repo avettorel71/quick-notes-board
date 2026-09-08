@@ -1222,7 +1222,7 @@ export class BoardActivityModal extends Modal {
 	 * senza ancora disegnarci dentro nulla. */
 	private createChartSection(containerEl: HTMLElement, title: string): HTMLElement {
 		const section = containerEl.createDiv({ cls: "qnb-activity-chart-section" });
-		section.createEl("h4", { text: title });
+		new Setting(section).setName(title).setHeading();
 		return section.createDiv({ cls: "qnb-activity-chart-wrapper" });
 	}
 

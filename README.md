@@ -1,6 +1,10 @@
 # Quick Notes Board
 
-An Obsidian plugin that adds a **quick notes board**: a dedicated pane where you create, organize, and browse small notes as draggable cards, without opening or creating separate files in your vault. Everything is saved in a single, human-readable file, `Quick notes board.md`, inside the plugin's folder.
+**Quick Notes Board** is a free, open-source Obsidian plugin for managing small notes fast, practically, and in a genuinely organized way. Instead of scattering quick thoughts across separate files, you get a dedicated board where notes live as draggable cards, sorted into **categories and groups** you define yourself — with instant search to put whatever you need right at your fingertips, no digging required.
+
+It goes well beyond simple sticky notes: built-in **alarms and reminders** (including recurring ones and multiple times a day), **password-protected encrypted notes** for anything sensitive, and cross-cutting **labels** for finding and managing notes by what they have in common, regardless of which category they live in. Everything — every note, every setting — is saved in a **single file**, with optional **data compression** to keep it remarkably small on disk.
+
+Customizable **sounds** for dozens of actions and smooth **window animations** round it out, for an experience that feels as good as it is fast — all of it, completely free.
 
 ---
 

@@ -1520,7 +1520,7 @@ export class QuickNotesBoardSettingTab extends PluginSettingTab {
 		}
 
 		for (const group of SOUND_EVENT_GROUPS) {
-			listContainer.createEl("h4", { text: this.tr(group.headingKey) });
+			new Setting(listContainer).setName(this.tr(group.headingKey)).setHeading();
 			for (const event of group.events) {
 				this.buildSoundRow(listContainer, event.id, this.tr(event.labelKey), availableFiles);
 			}
