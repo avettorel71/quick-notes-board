@@ -93,7 +93,7 @@ export async function decryptText(payload: string, password: string): Promise<st
 		salt = fromBase64(saltB64);
 		iv = fromBase64(ivB64);
 		data = fromBase64(dataB64);
-	} catch (e) {
+	} catch {
 		throw new DecryptionError("Dati corrotti");
 	}
 
@@ -105,7 +105,7 @@ export async function decryptText(payload: string, password: string): Promise<st
 			data as BufferSource
 		);
 		return new TextDecoder().decode(plainBuf);
-	} catch (e) {
+	} catch {
 		// AES-GCM fa fallire la decifratura se la password (quindi la chiave) è
 		// sbagliata, o se i dati sono stati alterati: non possiamo distinguere i due
 		// casi, ma in entrambi è corretto non restituire nulla.

@@ -2,7 +2,6 @@ import { ItemView, WorkspaceLeaf, MarkdownRenderer, setIcon, Notice } from "obsi
 import type QuickNotesBoardPlugin from "./main";
 import type { QuickNote } from "./main";
 import { DEFAULT_FONT_SIZE, DEFAULT_FONT_FAMILY, DEFAULT_FONT_COLOR, DEFAULT_BG_COLOR, FONT_FAMILY_CSS, getContrastTextColor } from "./main";
-import type { QnbFontFamily } from "./main";
 import { NewNoteModal, ChangeCategoryModal, FontSizeModal, TrashModal, ArchiveModal, LockPasswordModal, NoteInfoModal, CategoryStatsModal, BoardInfoModal, BoardActivityModal, DueDateModal, AlarmListModal, NoteExplorerModal, BoardStructureModal, LabelAssignModal } from "./modal";
 import { t } from "./i18n";
 import type { QnbCategory, QnbGroup, QnbNoteIconId } from "./settings";
@@ -1871,7 +1870,6 @@ export class QuickNotesBoardView extends ItemView {
 		const startX = evt.clientX;
 		const startY = evt.clientY;
 		const origX = note.x;
-		const origY = note.y;
 		const origW = note.w;
 		const origH = note.h;
 
@@ -2659,7 +2657,7 @@ function highlightTextInElement(root: HTMLElement, query: string) {
 		let idx = lower.indexOf(q);
 		while (idx !== -1) {
 			if (idx > lastIndex) frag.appendChild(document.createTextNode(value.slice(lastIndex, idx)));
-			const mark = frag.createEl("mark", {
+			frag.createEl("mark", {
 				cls: "qnb-search-highlight",
 				text: value.slice(idx, idx + q.length),
 			});

@@ -189,7 +189,7 @@ export function getContrastTextColor(hex: string): string {
 function safeDecodeURIComponent(value: string): string {
 	try {
 		return decodeURIComponent(value);
-	} catch (e) {
+	} catch {
 		return "";
 	}
 }
@@ -886,7 +886,7 @@ export default class QuickNotesBoardPlugin extends Plugin {
 			// Notifica persistente (non sparisce da sola) + suono in loop: entrambi si
 			// fermano solo cliccando la notifica stessa o l'icona allarme della nota.
 			const notice = new Notice(this.tr("notice.dueReminder", { title: note.title }), 0);
-			notice.noticeEl.addEventListener("click", () => this.stopDueAlarm(note.id));
+			notice.messageEl.addEventListener("click", () => this.stopDueAlarm(note.id));
 			this.playDueAlarmLoop(note.id);
 			this.focusDueNoteInOpenViews(note.id);
 		}

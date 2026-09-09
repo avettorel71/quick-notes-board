@@ -542,7 +542,6 @@ export class QuickNotesBoardSettingTab extends PluginSettingTab {
 						slider
 							.setLimits(0, 10, 0.5)
 							.setValue(this.plugin.settings.hoverLiftDurationSeconds)
-							.setDynamicTooltip()
 							.onChange(async (value) => {
 								await this.plugin.setHoverLiftDurationSeconds(value);
 							})
@@ -591,7 +590,6 @@ export class QuickNotesBoardSettingTab extends PluginSettingTab {
 						slider
 							.setLimits(10, 50, 1)
 							.setValue(this.plugin.settings.checklistProgressBarHeight)
-							.setDynamicTooltip()
 							.onChange(async (value) => {
 								await this.plugin.setChecklistProgressBarHeight(value);
 							})
@@ -634,7 +632,6 @@ export class QuickNotesBoardSettingTab extends PluginSettingTab {
 						slider
 							.setLimits(0, 10, 0.5)
 							.setValue(this.plugin.settings.checklistProgressCompleteDelaySeconds)
-							.setDynamicTooltip()
 							.onChange(async (value) => {
 								await this.plugin.setChecklistProgressCompleteDelaySeconds(value);
 							})
@@ -661,7 +658,6 @@ export class QuickNotesBoardSettingTab extends PluginSettingTab {
 						slider
 							.setLimits(0, 100, 5)
 							.setValue(this.plugin.settings.noteShadowIntensity)
-							.setDynamicTooltip()
 							.onChange(async (value) => {
 								await this.plugin.setNoteShadowIntensity(value);
 							})
@@ -1679,7 +1675,7 @@ export class QuickNotesBoardSettingTab extends PluginSettingTab {
 				bgSetting.addButton((btn) =>
 					btn
 						.setButtonText(this.tr("settings.image.remove"))
-						.setWarning()
+						.setDestructive()
 						.onClick(async () => {
 							await this.plugin.clearBackgroundImage();
 							render();
@@ -1710,7 +1706,6 @@ export class QuickNotesBoardSettingTab extends PluginSettingTab {
 					slider
 						.setLimits(0, 80, 5)
 						.setValue(this.plugin.settings.backgroundDim)
-						.setDynamicTooltip()
 						.onChange(async (value) => {
 							this.plugin.settings.backgroundDim = value;
 							await this.plugin.saveSettings();

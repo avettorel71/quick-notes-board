@@ -303,7 +303,6 @@ export class FontSizeModal extends Modal {
 				slider
 					.setLimits(10, 32, 1)
 					.setValue(this.size)
-					.setDynamicTooltip()
 					.onChange((value) => {
 						this.size = value;
 						this.onChangeSize(value);
@@ -459,7 +458,7 @@ export class TrashModal extends Modal {
 				btn
 					.setIcon("trash-2")
 					.setTooltip(this.tr("trash.deleteForever"))
-					.setWarning()
+					.setDestructive()
 					.onClick(async () => {
 						this.plugin.notes = this.plugin.notes.filter((n) => n.id !== note.id);
 						this.plugin.playSound("trash-delete-forever");
@@ -478,7 +477,7 @@ export class TrashModal extends Modal {
 		footer.addButton((btn) =>
 			btn
 				.setButtonText(this.tr("trash.emptyTrash"))
-				.setWarning()
+				.setDestructive()
 				.onClick(async () => {
 					this.plugin.notes = this.plugin.notes.filter((n) => !n.deleted);
 					this.plugin.playSound("trash-empty");
@@ -559,7 +558,7 @@ export class ArchiveModal extends Modal {
 				btn
 					.setIcon("trash-2")
 					.setTooltip(this.tr("archive.sendToTrash"))
-					.setWarning()
+					.setDestructive()
 					.onClick(async () => {
 						note.deleted = true;
 						note.archived = false;
