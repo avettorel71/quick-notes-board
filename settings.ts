@@ -459,7 +459,444 @@ export class QuickNotesBoardSettingTab extends PluginSettingTab {
 			cls: "setting-item-description",
 			text: this.tr("settings.noteIconOrder.intro"),
 		});
+		this.buildNoteIconOrderList(containerEl);
 
+		new Setting(containerEl).setName(this.tr("settings.labels.heading")).setHeading();
+		containerEl.createEl("p", {
+			cls: "setting-item-description",
+			text: this.tr("settings.labels.intro"),
+		});
+		this.buildLabelsList(containerEl);
+
+		this.buildSimpleSettings(containerEl);
+		this.buildHoverLiftSection(containerEl);
+		this.buildChecklistProgressSection(containerEl);
+		this.buildShadowSection(containerEl);
+
+		new Setting(containerEl).setName(this.tr("settings.activityChart.heading")).setHeading();
+		this.buildActivityChartColors(containerEl);
+		this.buildFavoritesSection(containerEl);
+		this.buildConvertFolderSetting(containerEl);
+		this.buildDefaultNoteSizeSetting(containerEl);
+		this.buildLockedPlaceholderSetting(containerEl);
+
+		this.buildCategoriesSection(containerEl);
+		this.buildSoundsSection(containerEl);
+		this.buildBackgroundSection(containerEl);
+	}
+
+	/** Obsidian 1.13+: rende le impostazioni ricercabili nella ricerca globale delle Impostazioni
+	 * e sostituisce display() (che resta comunque sopra, invariato, per Obsidian < 1.13 — vedi
+	 * Path B della guida ufficiale alla migrazione). Le sezioni semplici sono righe dichiarative
+	 * dirette; quelle complesse (liste trascinabili, alberi di categorie) delegano con un
+	 * `render` alla stessa identica logica già usata da display(), così le due implementazioni
+	 * restano una singola fonte di verità invece di doversi mantenere sincronizzate a mano. */
+	getSettingDefinitions() {
+		return [
+			{
+				name: this.tr("settings.language.name"),
+				desc: this.tr("settings.language.desc"),
+				render: (setting: Setting) => {
+					setting.addDropdown((dd) =>
+						dd
+							.addOption("it", this.tr("settings.language.it"))
+							.addOption("en", this.tr("settings.language.en"))
+							.setValue(this.plugin.settings.language)
+							.onChange(async (value: string) => {
+								await this.plugin.setLanguage(value as QnbLang);
+								this.update();
+							})
+					);
+				},
+			},
+			{
+				name: this.tr("settings.fullscreen.name"),
+				desc: this.tr("settings.fullscreen.desc"),
+				render: (setting: Setting) => {
+					setting.addToggle((toggle) =>
+						toggle.setValue(this.plugin.settings.fullscreenMode).onChange(async (value) => {
+							await this.plugin.setFullscreenMode(value);
+						})
+					);
+				},
+			},
+			{
+				name: this.tr("settings.collapseIcons.name"),
+				desc: this.tr("settings.collapseIcons.desc"),
+				render: (setting: Setting) => {
+					setting.addToggle((toggle) =>
+						toggle.setValue(this.plugin.settings.collapseNoteIcons).onChange(async (value) => {
+							await this.plugin.setCollapseNoteIcons(value);
+						})
+					);
+				},
+			},
+			{
+				name: this.tr("settings.noteIconOrder.heading"),
+				desc: this.tr("settings.noteIconOrder.intro"),
+				render: (setting: Setting) => {
+					setting.setHeading();
+					this.buildNoteIconOrderList(setting.settingEl.createDiv());
+				},
+			},
+			{
+				name: this.tr("settings.labels.heading"),
+				desc: this.tr("settings.labels.intro"),
+				render: (setting: Setting) => {
+					setting.setHeading();
+					this.buildLabelsList(setting.settingEl.createDiv());
+				},
+			},
+			{
+				name: this.tr("settings.requireDoubleClick.name"),
+				desc: this.tr("settings.requireDoubleClick.desc"),
+				render: (setting: Setting) => {
+					setting.addToggle((toggle) =>
+						toggle.setValue(this.plugin.settings.requireDoubleClickToEdit).onChange(async (value) => {
+							await this.plugin.setRequireDoubleClickToEdit(value);
+						})
+					);
+				},
+			},
+			{
+				name: this.tr("settings.dueDateBorderColor.name"),
+				desc: this.tr("settings.dueDateBorderColor.desc"),
+				render: (setting: Setting) => {
+					setting.addColorPicker((cp) =>
+						cp.setValue(this.plugin.settings.dueDateBorderColor).onChange(async (value) => {
+							await this.plugin.setDueDateBorderColor(value);
+						})
+					);
+				},
+			},
+			{
+				name: this.tr("settings.compression.name"),
+				desc: this.tr("settings.compression.desc"),
+				render: (setting: Setting) => {
+					setting.addToggle((toggle) =>
+						toggle.setValue(this.plugin.settings.compressionEnabled).onChange(async (value) => {
+							await this.plugin.setCompressionEnabled(value);
+						})
+					);
+				},
+			},
+			{
+				name: this.tr("settings.dragSettleAnimation.name"),
+				desc: this.tr("settings.dragSettleAnimation.desc"),
+				render: (setting: Setting) => {
+					setting.addToggle((toggle) =>
+						toggle.setValue(this.plugin.settings.dragSettleAnimation).onChange(async (value) => {
+							await this.plugin.setDragSettleAnimation(value);
+						})
+					);
+				},
+			},
+			{
+				name: this.tr("settings.hoverLift.name"),
+				desc: this.tr("settings.hoverLift.desc"),
+				render: (setting: Setting) => {
+					setting.addToggle((toggle) =>
+						toggle.setValue(this.plugin.settings.hoverLiftEffect).onChange(async (value) => {
+							await this.plugin.setHoverLiftEffect(value);
+							this.refreshDomState();
+						})
+					);
+				},
+			},
+			{
+				name: this.tr("settings.hoverLift.durationLabel"),
+				desc: this.tr("settings.hoverLift.durationDesc"),
+				visible: () => this.plugin.settings.hoverLiftEffect,
+				render: (setting: Setting) => {
+					setting.addSlider((slider) =>
+						slider
+							.setLimits(0, 10, 0.5)
+							.setValue(this.plugin.settings.hoverLiftDurationSeconds)
+							.setDynamicTooltip()
+							.onChange(async (value) => {
+								await this.plugin.setHoverLiftDurationSeconds(value);
+							})
+					);
+				},
+			},
+			{
+				name: this.tr("settings.checklistProgress.name"),
+				desc: this.tr("settings.checklistProgress.desc"),
+				render: (setting: Setting) => {
+					setting.addToggle((toggle) =>
+						toggle.setValue(this.plugin.settings.checklistProgressBar).onChange(async (value) => {
+							await this.plugin.setChecklistProgressBar(value);
+							this.refreshDomState();
+						})
+					);
+				},
+			},
+			{
+				name: this.tr("settings.checklistProgress.colorStartLabel"),
+				visible: () => this.plugin.settings.checklistProgressBar,
+				render: (setting: Setting) => {
+					setting.addColorPicker((cp) =>
+						cp.setValue(this.plugin.settings.checklistProgressBarColorStart).onChange(async (value) => {
+							await this.plugin.setChecklistProgressBarColorStart(value);
+						})
+					);
+				},
+			},
+			{
+				name: this.tr("settings.checklistProgress.colorEndLabel"),
+				visible: () => this.plugin.settings.checklistProgressBar,
+				render: (setting: Setting) => {
+					setting.addColorPicker((cp) =>
+						cp.setValue(this.plugin.settings.checklistProgressBarColorEnd).onChange(async (value) => {
+							await this.plugin.setChecklistProgressBarColorEnd(value);
+						})
+					);
+				},
+			},
+			{
+				name: this.tr("settings.checklistProgress.heightLabel"),
+				visible: () => this.plugin.settings.checklistProgressBar,
+				render: (setting: Setting) => {
+					setting.addSlider((slider) =>
+						slider
+							.setLimits(10, 50, 1)
+							.setValue(this.plugin.settings.checklistProgressBarHeight)
+							.setDynamicTooltip()
+							.onChange(async (value) => {
+								await this.plugin.setChecklistProgressBarHeight(value);
+							})
+					);
+				},
+			},
+			{
+				name: this.tr("settings.checklistProgress.completeColorLabel"),
+				visible: () => this.plugin.settings.checklistProgressBar,
+				render: (setting: Setting) => {
+					setting.addColorPicker((cp) =>
+						cp
+							.setValue(this.plugin.settings.checklistProgressBarCompleteColor)
+							.onChange(async (value) => {
+								await this.plugin.setChecklistProgressBarCompleteColor(value);
+							})
+					);
+				},
+			},
+			{
+				name: this.tr("settings.checklistProgress.completeTextLabel"),
+				desc: this.tr("settings.checklistProgress.completeTextDesc"),
+				visible: () => this.plugin.settings.checklistProgressBar,
+				render: (setting: Setting) => {
+					setting.addText((text) => {
+						text.setPlaceholder(this.tr("view.checklistProgress.completeDefault"));
+						text.setValue(this.plugin.settings.checklistProgressBarCompleteText);
+						text.onChange(async (value) => {
+							await this.plugin.setChecklistProgressBarCompleteText(value);
+						});
+					});
+				},
+			},
+			{
+				name: this.tr("settings.checklistProgress.completeDelayLabel"),
+				desc: this.tr("settings.checklistProgress.completeDelayDesc"),
+				visible: () => this.plugin.settings.checklistProgressBar,
+				render: (setting: Setting) => {
+					setting.addSlider((slider) =>
+						slider
+							.setLimits(0, 10, 0.5)
+							.setValue(this.plugin.settings.checklistProgressCompleteDelaySeconds)
+							.setDynamicTooltip()
+							.onChange(async (value) => {
+								await this.plugin.setChecklistProgressCompleteDelaySeconds(value);
+							})
+					);
+				},
+			},
+			{
+				name: this.tr("settings.alwaysOnShadow.name"),
+				desc: this.tr("settings.alwaysOnShadow.desc"),
+				render: (setting: Setting) => {
+					setting.addToggle((toggle) =>
+						toggle.setValue(this.plugin.settings.alwaysOnNoteShadow).onChange(async (value) => {
+							await this.plugin.setAlwaysOnNoteShadow(value);
+							this.refreshDomState();
+						})
+					);
+				},
+			},
+			{
+				name: this.tr("settings.alwaysOnShadow.intensityLabel"),
+				visible: () => this.plugin.settings.alwaysOnNoteShadow,
+				render: (setting: Setting) => {
+					setting.addSlider((slider) =>
+						slider
+							.setLimits(0, 100, 5)
+							.setValue(this.plugin.settings.noteShadowIntensity)
+							.setDynamicTooltip()
+							.onChange(async (value) => {
+								await this.plugin.setNoteShadowIntensity(value);
+							})
+					);
+				},
+			},
+			{
+				name: this.tr("settings.activityChart.heading"),
+				render: (setting: Setting) => {
+					setting.setHeading();
+					this.buildActivityChartColors(setting.settingEl.createDiv());
+				},
+			},
+			{
+				name: this.tr("settings.useFavorites.name"),
+				desc: this.tr("settings.useFavorites.desc"),
+				render: (setting: Setting) => {
+					setting.addToggle((toggle) =>
+						toggle.setValue(this.plugin.settings.useFavorites).onChange(async (value) => {
+							await this.plugin.setUseFavorites(value);
+							this.refreshDomState();
+						})
+					);
+				},
+			},
+			{
+				name: this.tr("settings.favoriteChipFullTitle.name"),
+				desc: this.tr("settings.favoriteChipFullTitle.desc"),
+				visible: () => this.plugin.settings.useFavorites,
+				render: (setting: Setting) => {
+					setting.addToggle((toggle) =>
+						toggle.setValue(this.plugin.settings.favoriteChipFullTitle).onChange(async (value) => {
+							await this.plugin.setFavoriteChipFullTitle(value);
+						})
+					);
+				},
+			},
+			{
+				name: this.tr("settings.convertFolder.name"),
+				desc: this.tr("settings.convertFolder.desc"),
+				render: (setting: Setting) => {
+					setting.addText((text) =>
+						text
+							.setPlaceholder(this.tr("settings.convertFolder.placeholder"))
+							.setValue(this.plugin.settings.convertedNotesFolder)
+							.onChange(async (value) => {
+								await this.plugin.setConvertedNotesFolder(value.trim());
+							})
+					);
+				},
+			},
+			{
+				name: this.tr("settings.defaultNoteSize.name"),
+				desc: this.tr("settings.defaultNoteSize.desc"),
+				render: (setting: Setting) => {
+					const MIN_NOTE_W = 180;
+					const MIN_NOTE_H = 120;
+					setting
+						.addText((text) => {
+							text.inputEl.type = "number";
+							text.inputEl.min = String(MIN_NOTE_W);
+							text.setValue(String(this.plugin.settings.defaultNoteWidth));
+							text.inputEl.addEventListener("change", () => {
+								void (async () => {
+									const value = Math.max(MIN_NOTE_W, parseInt(text.inputEl.value, 10) || MIN_NOTE_W);
+									text.setValue(String(value));
+									await this.plugin.setDefaultNoteSize(value, this.plugin.settings.defaultNoteHeight);
+								})();
+							});
+						})
+						.addText((text) => {
+							text.inputEl.type = "number";
+							text.inputEl.min = String(MIN_NOTE_H);
+							text.setValue(String(this.plugin.settings.defaultNoteHeight));
+							text.inputEl.addEventListener("change", () => {
+								void (async () => {
+									const value = Math.max(MIN_NOTE_H, parseInt(text.inputEl.value, 10) || MIN_NOTE_H);
+									text.setValue(String(value));
+									await this.plugin.setDefaultNoteSize(this.plugin.settings.defaultNoteWidth, value);
+								})();
+							});
+						});
+				},
+			},
+			{
+				name: this.tr("settings.lockedPlaceholder.name"),
+				desc: this.tr("settings.lockedPlaceholder.desc"),
+				render: (setting: Setting) => {
+					let lockedPlaceholderField: TextComponent | null = null;
+					setting
+						.addText((text) => {
+							lockedPlaceholderField = text;
+							text.setPlaceholder(this.tr("view.note.lockedPlaceholder"));
+							text.setValue(this.plugin.settings.lockedNotePlaceholder);
+							text.onChange(async (value) => {
+								await this.plugin.setLockedNotePlaceholder(value);
+							});
+						})
+						.addButton((btn) =>
+							btn
+								.setButtonText(this.tr("settings.categories.titleColorReset"))
+								.setTooltip(this.tr("settings.lockedPlaceholder.resetTooltip"))
+								.onClick(async () => {
+									await this.plugin.setLockedNotePlaceholder("");
+									lockedPlaceholderField?.setValue("");
+								})
+						);
+				},
+			},
+			{
+				name: this.tr("settings.categories.heading"),
+				desc: this.tr("settings.categories.desc"),
+				render: (setting: Setting) => {
+					setting.setHeading();
+					this.buildCategoriesSection(setting.settingEl.createDiv(), false);
+				},
+			},
+			{
+				name: this.tr("settings.sounds.heading"),
+				desc: this.tr("settings.sounds.desc", { configDir: this.app.vault.configDir }),
+				render: (setting: Setting) => {
+					setting.setHeading();
+					this.buildSoundsSection(setting.settingEl.createDiv(), false);
+				},
+			},
+			{
+				name: this.tr("settings.background.name"),
+				desc: this.tr("settings.background.desc"),
+				render: (setting: Setting) => {
+					setting.addDropdown((dd) =>
+						dd
+							.addOption("none", this.tr("settings.background.none"))
+							.addOption("image", this.tr("settings.background.image"))
+							.addOption("color", this.tr("settings.background.color"))
+							.setValue(this.plugin.settings.backgroundMode)
+							.onChange(async (value: string) => {
+								await this.plugin.setBackgroundMode(value as QnbBackgroundMode);
+								this.refreshDomState();
+							})
+					);
+				},
+			},
+			{
+				name: this.tr("settings.background.image"),
+				visible: () => this.plugin.settings.backgroundMode === "image",
+				render: (setting: Setting) => {
+					setting.setHeading();
+					this.buildImageSection(setting.settingEl.createDiv());
+				},
+			},
+			{
+				name: this.tr("settings.background.color"),
+				visible: () => this.plugin.settings.backgroundMode === "color",
+				render: (setting: Setting) => {
+					setting.setHeading();
+					this.buildColorSection(setting.settingEl.createDiv());
+				},
+			},
+		];
+	}
+
+	/** Elenco riordinabile (drag&drop) delle icone azione mostrate su ogni nota, con toggle di
+	 * visibilità per ciascuna. Isolato in un metodo a sé perché riutilizzato identico sia
+	 * dall'imperativo display() sia dalla riga dichiarativa di getSettingDefinitions(). */
+	private buildNoteIconOrderList(containerEl: HTMLElement) {
 		const iconListEl = containerEl.createDiv();
 		const renderIconList = () => {
 			iconListEl.empty();
@@ -525,13 +962,11 @@ export class QuickNotesBoardSettingTab extends PluginSettingTab {
 			});
 		};
 		renderIconList();
+	}
 
-		new Setting(containerEl).setName(this.tr("settings.labels.heading")).setHeading();
-		containerEl.createEl("p", {
-			cls: "setting-item-description",
-			text: this.tr("settings.labels.intro"),
-		});
-
+	/** Elenco riordinabile delle etichette (colore + nome), con aggiunta/eliminazione. Isolato
+	 * per lo stesso motivo di buildNoteIconOrderList. */
+	private buildLabelsList(containerEl: HTMLElement) {
 		const labelsListEl = containerEl.createDiv();
 		let draggedLabelId: string | null = null;
 		const renderLabelsList = () => {
@@ -624,7 +1059,12 @@ export class QuickNotesBoardSettingTab extends PluginSettingTab {
 			);
 		};
 		renderLabelsList();
+	}
 
+	/** Quattro toggle/colorpicker indipendenti, senza stato annidato: qui vengono applicati a
+	 * una Setting già creata dal chiamante (display() ne crea una nuova per ciascuno; la riga
+	 * dichiarativa passa quella fornita dal framework). */
+	private buildSimpleSettings(containerEl: HTMLElement) {
 		new Setting(containerEl)
 			.setName(this.tr("settings.requireDoubleClick.name"))
 			.setDesc(this.tr("settings.requireDoubleClick.desc"))
@@ -660,7 +1100,9 @@ export class QuickNotesBoardSettingTab extends PluginSettingTab {
 					await this.plugin.setDragSettleAnimation(value);
 				})
 			);
+	}
 
+	private buildHoverLiftSection(containerEl: HTMLElement) {
 		const hoverLiftContainer = containerEl.createDiv();
 		const renderHoverLiftSettings = () => {
 			hoverLiftContainer.empty();
@@ -692,7 +1134,9 @@ export class QuickNotesBoardSettingTab extends PluginSettingTab {
 			}
 		};
 		renderHoverLiftSettings();
+	}
 
+	private buildChecklistProgressSection(containerEl: HTMLElement) {
 		const checklistProgressContainer = containerEl.createDiv();
 		const renderChecklistProgressSettings = () => {
 			checklistProgressContainer.empty();
@@ -778,7 +1222,9 @@ export class QuickNotesBoardSettingTab extends PluginSettingTab {
 			}
 		};
 		renderChecklistProgressSettings();
+	}
 
+	private buildShadowSection(containerEl: HTMLElement) {
 		const shadowContainer = containerEl.createDiv();
 		const renderShadowSettings = () => {
 			shadowContainer.empty();
@@ -809,9 +1255,11 @@ export class QuickNotesBoardSettingTab extends PluginSettingTab {
 			}
 		};
 		renderShadowSettings();
+	}
 
-		new Setting(containerEl).setName(this.tr("settings.activityChart.heading")).setHeading();
-
+	/** Le due righe colore (note/caratteri) del grafico attività, senza l'intestazione (che
+	 * display() e la riga dichiarativa gestiscono ciascuno a modo proprio). */
+	private buildActivityChartColors(containerEl: HTMLElement) {
 		let notesColorPicker: ColorComponent | null = null;
 		const notesColorRow = new Setting(containerEl).setName(this.tr("settings.activityChart.notesColor"));
 		notesColorRow.addColorPicker((cp) => {
@@ -843,7 +1291,9 @@ export class QuickNotesBoardSettingTab extends PluginSettingTab {
 				charsColorPicker?.setValue("#4caf50");
 			})
 		);
+	}
 
+	private buildFavoritesSection(containerEl: HTMLElement) {
 		const favoritesContainer = containerEl.createDiv();
 		const renderFavoritesSettings = () => {
 			favoritesContainer.empty();
@@ -873,7 +1323,9 @@ export class QuickNotesBoardSettingTab extends PluginSettingTab {
 			}
 		};
 		renderFavoritesSettings();
+	}
 
+	private buildConvertFolderSetting(containerEl: HTMLElement) {
 		new Setting(containerEl)
 			.setName(this.tr("settings.convertFolder.name"))
 			.setDesc(this.tr("settings.convertFolder.desc"))
@@ -885,7 +1337,9 @@ export class QuickNotesBoardSettingTab extends PluginSettingTab {
 						await this.plugin.setConvertedNotesFolder(value.trim());
 					})
 			);
+	}
 
+	private buildDefaultNoteSizeSetting(containerEl: HTMLElement) {
 		const MIN_NOTE_W = 180;
 		const MIN_NOTE_H = 120;
 		new Setting(containerEl)
@@ -915,7 +1369,9 @@ export class QuickNotesBoardSettingTab extends PluginSettingTab {
 					})();
 				});
 			});
+	}
 
+	private buildLockedPlaceholderSetting(containerEl: HTMLElement) {
 		let lockedPlaceholderField: TextComponent | null = null;
 		new Setting(containerEl)
 			.setName(this.tr("settings.lockedPlaceholder.name"))
@@ -937,10 +1393,9 @@ export class QuickNotesBoardSettingTab extends PluginSettingTab {
 						lockedPlaceholderField?.setValue("");
 					})
 			);
+	}
 
-		this.buildCategoriesSection(containerEl);
-		this.buildSoundsSection(containerEl);
-
+	private buildBackgroundSection(containerEl: HTMLElement) {
 		const modeContainer = containerEl.createDiv();
 		const renderMode = () => {
 			modeContainer.empty();
@@ -971,17 +1426,19 @@ export class QuickNotesBoardSettingTab extends PluginSettingTab {
 		renderMode();
 	}
 
-	private buildCategoriesSection(containerEl: HTMLElement) {
+	private buildCategoriesSection(containerEl: HTMLElement, withHeading = true) {
 		const wrapper = containerEl.createDiv();
 
 		const render = () => {
 			wrapper.empty();
 
-			new Setting(wrapper).setName(this.tr("settings.categories.heading")).setHeading();
-			wrapper.createEl("p", {
-				cls: "setting-item-description",
-				text: this.tr("settings.categories.desc"),
-			});
+			if (withHeading) {
+				new Setting(wrapper).setName(this.tr("settings.categories.heading")).setHeading();
+				wrapper.createEl("p", {
+					cls: "setting-item-description",
+					text: this.tr("settings.categories.desc"),
+				});
+			}
 
 			this.plugin.settings.categories.forEach((cat, index) => {
 				const card = wrapper.createDiv({ cls: "qnb-category-card" });
@@ -1508,12 +1965,14 @@ export class QuickNotesBoardSettingTab extends PluginSettingTab {
 		return count;
 	}
 
-	private buildSoundsSection(containerEl: HTMLElement) {
-		new Setting(containerEl).setName(this.tr("settings.sounds.heading")).setHeading();
-		containerEl.createEl("p", {
-			cls: "setting-item-description",
-			text: this.tr("settings.sounds.desc", { configDir: this.app.vault.configDir }),
-		});
+	private buildSoundsSection(containerEl: HTMLElement, withHeading = true) {
+		if (withHeading) {
+			new Setting(containerEl).setName(this.tr("settings.sounds.heading")).setHeading();
+			containerEl.createEl("p", {
+				cls: "setting-item-description",
+				text: this.tr("settings.sounds.desc", { configDir: this.app.vault.configDir }),
+			});
+		}
 
 		const listContainer = containerEl.createDiv();
 		void this.renderSoundsList(listContainer);
