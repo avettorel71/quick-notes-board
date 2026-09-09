@@ -25,20 +25,21 @@ Customizable **sounds** for dozens of actions and smooth **window animations** r
 7. [Categories](#categories)
 8. [Groups and subgroups](#groups-and-subgroups)
 9. [Labels](#labels)
-10. [Alarms and reminders](#alarms-and-reminders)
-11. [Note Explorer](#note-explorer)
-12. [Board Structure diagram](#board-structure-diagram)
-13. [Trash](#trash)
-14. [Archive](#archive)
-15. [Password lock (encryption)](#password-lock-encryption)
-16. [Board appearance](#board-appearance)
-17. [Data file compression](#data-file-compression)
-18. [Sound effects](#sound-effects)
-19. [Language](#language)
-20. [Data file format](#data-file-format)
-21. [Screenshots](#screenshots)
-22. [Version history](#version-history)
-23. [Development](#development)
+10. [Board Activity](#board-activity)
+11. [Alarms and reminders](#alarms-and-reminders)
+12. [Note Explorer](#note-explorer)
+13. [Board Structure diagram](#board-structure-diagram)
+14. [Trash](#trash)
+15. [Archive](#archive)
+16. [Password lock (encryption)](#password-lock-encryption)
+17. [Board appearance](#board-appearance)
+18. [Data file compression](#data-file-compression)
+19. [Sound effects](#sound-effects)
+20. [Language](#language)
+21. [Data file format](#data-file-format)
+22. [Screenshots](#screenshots)
+23. [Version history](#version-history)
+24. [Development](#development)
 
 ---
 
@@ -80,7 +81,7 @@ The top bar contains, from left to right:
 | **Category buttons** | One per registered category, colored like the category itself. Click to show/hide only that category's notes. If the category has [groups](#groups-and-subgroups), a small arrow next to it opens a menu with the individual groups. |
 | **Reorder** | Tidies up the visible notes into a grid. Cycles through **five modes** on each click, in sequence: current position (reading order), smallest→largest horizontal, largest→smallest horizontal, smallest→largest vertical, largest→smallest vertical. Size-based modes always stay within the visible width — only vertical scrolling is ever needed, never horizontal. A short message after each click tells you which mode was just applied. |
 | **Info** | Opens a summary window: total notes, categories, trashed/archived/encrypted notes, file size (and, [when compression is on](#data-file-compression), the real vs. compressed size and the resulting savings). |
-| **Activity** | Opens a resizable window with a bar chart of notes created and characters written per day, browsable by month. |
+| **Activity** | Opens the [Board Activity](#board-activity) window: a resizable bar chart of notes created and characters written per day, browsable by month. |
 | **Alarms** | Opens the [alarm list](#alarms-and-reminders) — every note with an alarm set, at a glance. |
 | **Explore notes** | Opens the [Note Explorer](#note-explorer) — a searchable, collapsible overview of every note by category/group/subgroup. |
 | **Board structure** | Opens the [Board Structure diagram](#board-structure-diagram) — a read-only flowchart of your categories, groups and subgroups. |
@@ -204,7 +205,17 @@ Labels are a **flat, cross-cutting** tagging system, independent from categories
 
 ---
 
+## Board Activity
+
+![Board Activity screenshot](Screenshot02.jpg)
+
+The toolbar's "Activity" button opens a resizable window with two bar charts, browsable month by month: **notes created per day** and **characters written per day**, plus the running totals for the selected month. It's a quick way to see, at a glance, how many notes and how many characters you've actually created and typed in the current month — a simple but effective way to track your writing/working pace over time, spot your most productive days, or just confirm you're keeping up a steady habit. Hovering over a bar shows the exact value for that day; the colors of both charts are customizable from settings.
+
+---
+
 ## Alarms and reminders
+
+![Alarms and reminders screenshot](Screenshot03.jpg)
 
 Set from the alarm clock icon on a note. The panel lets you configure:
 
@@ -232,6 +243,8 @@ Clicking a note brings it into view on the board, highlighted — even if it was
 ---
 
 ## Board Structure diagram
+
+![Board Structure diagram screenshot](Screenshot05.jpg)
 
 The toolbar's "Board structure" button opens a resizable, read-only flowchart: a box per category (full color) with its groups and subgroups branching below it (progressively lighter shades of the same color, so you can tell the depth apart at a glance), connected by lines — no notes shown, just the organizational skeleton, for getting your bearings when you have many categories and groups. Nothing is clickable; it's purely informational.
 
@@ -285,6 +298,8 @@ From settings you can also customize the background behind the notes:
 ---
 
 ## Data file compression
+
+![Data file compression screenshot](Screenshot04.jpg)
 
 From **Settings**, you can enable compressing the data file on disk (typically a **70–90% size reduction**, since the file's repetitive metadata compresses especially well).
 
