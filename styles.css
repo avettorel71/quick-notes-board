@@ -99,9 +99,9 @@
 	flex-shrink: 0;
 }
 
-.qnb-btn {
-	display: flex !important;
-	flex-direction: row !important;
+button.qnb-btn.qnb-btn {
+	display: flex;
+	flex-direction: row;
 	align-items: center;
 	gap: 6px;
 	padding: 6px 10px;
