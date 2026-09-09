@@ -36,8 +36,9 @@ Customizable **sounds** for dozens of actions and smooth **window animations** r
 18. [Sound effects](#sound-effects)
 19. [Language](#language)
 20. [Data file format](#data-file-format)
-21. [Version history](#version-history)
-22. [Development](#development)
+21. [Screenshots](#screenshots)
+22. [Version history](#version-history)
+23. [Development](#development)
 
 ---
 
@@ -321,6 +322,18 @@ The plugin's interface (buttons, labels, windows, messages) is available in **It
 All active, trashed, and archived notes are saved in a single, human-readable file, `Quick notes board.md`, inside the plugin's folder — organized by category, with each note's position, size, and every other property (font, colors, encrypted state, group, labels, alarm settings, etc.) encoded in a `%% QNB ... %%` block next to its title and text. The file is designed to be easy to read, but it's best not to edit it by hand, to avoid breaking its structure.
 
 If [data compression](#data-file-compression) is enabled, the file instead starts with a `%% QNB-COMPRESSED v1 %%` marker followed by compressed, base64-encoded content — no longer human-readable directly, but still auto-detected correctly regardless of the current setting.
+
+---
+
+## Screenshots
+
+![Quick Notes Board screenshot 2](Screenshot02.jpg)
+
+![Quick Notes Board screenshot 3](Screenshot03.jpg)
+
+![Quick Notes Board screenshot 4](Screenshot04.jpg)
+
+![Quick Notes Board screenshot 5](Screenshot05.jpg)
 
 ---
 
