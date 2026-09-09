@@ -2184,24 +2184,28 @@ export class QuickNotesBoardView extends ItemView {
 	 * carattere. Ritorna null se il browser non supporta l'API necessaria, o il punto non
 	 * cade su testo: in quel caso resta il comportamento di sempre (cursore a fine testo). */
 	private getClickOffsetInRenderedBody(bodyEl: HTMLElement, clientX: number, clientY: number): number | null {
-		const doc = document as Document & {
-			caretRangeFromPoint?: (x: number, y: number) => Range | null;
+		// Cast passando per `unknown`, non per un'intersezione con `Document`: così la
+		// proprietà si risolve solo su questo tipo locale, che non porta il tag
+		// `@deprecated` di lib.dom.d.ts per caretRangeFromPoint (usata solo come fallback,
+		// per i browser/Electron meno recenti che non hanno ancora l'API standard).
+		const doc = document as unknown as {
 			caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null;
+			caretRangeFromPoint?: (x: number, y: number) => Range | null;
 		};
 
 		let node: Node | null = null;
 		let offsetInNode = 0;
 
-		if (typeof doc.caretRangeFromPoint === "function") {
-			const range = doc.caretRangeFromPoint(clientX, clientY);
-			if (!range) return null;
-			node = range.startContainer;
-			offsetInNode = range.startOffset;
-		} else if (typeof doc.caretPositionFromPoint === "function") {
+		if (typeof doc.caretPositionFromPoint === "function") {
 			const pos = doc.caretPositionFromPoint(clientX, clientY);
 			if (!pos) return null;
 			node = pos.offsetNode;
 			offsetInNode = pos.offset;
+		} else if (typeof doc.caretRangeFromPoint === "function") {
+			const range = doc.caretRangeFromPoint(clientX, clientY);
+			if (!range) return null;
+			node = range.startContainer;
+			offsetInNode = range.startOffset;
 		} else {
 			return null;
 		}
