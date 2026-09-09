@@ -100,7 +100,8 @@
 }
 
 .qnb-btn {
-	display: flex;
+	display: flex !important;
+	flex-direction: row !important;
 	align-items: center;
 	gap: 6px;
 	padding: 6px 10px;
@@ -109,6 +110,7 @@
 	background: var(--interactive-normal);
 	cursor: pointer;
 	font-size: 0.85em;
+	white-space: nowrap;
 }
 
 .qnb-btn:hover {
