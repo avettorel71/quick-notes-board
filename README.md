@@ -354,6 +354,15 @@ If [data compression](#data-file-compression) is enabled, the file instead start
 
 ## Version history
 
+### 1.0.1
+
+Maintenance release: no user-facing feature changes, but requires **Obsidian 1.13.0** or later (was 1.7.2).
+
+- Settings now use Obsidian's new declarative settings API, so every option is findable from the global Settings search.
+- Fixed a bug where, with multiple daily alarm times on the same note, reopening Obsidian after one time had already passed (but before the next) could trigger a sound/notification at an unrelated, unexpected moment instead of staying silent until the next scheduled time.
+- Fixed the Alarms list's "time remaining" countdown for notes with multiple daily times: it now counts down to the next upcoming time instead of staying anchored to the first one of the day (which showed "Overdue" as soon as that first alarm had rung, even with a later one still pending).
+- Various internal fixes flagged by Obsidian's plugin review (deprecated API usage, minor code cleanup) — no behavior change.
+
 ### 1.0.0
 
 First public release. Highlights include:

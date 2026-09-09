@@ -1,6 +1,6 @@
 {
 	"name": "quick-notes-board",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"description": "Obsidian plugin - Quick Notes Board",
 	"main": "main.js",
 	"scripts": {
