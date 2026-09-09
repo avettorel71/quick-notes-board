@@ -815,7 +815,7 @@ export default class QuickNotesBoardPlugin extends Plugin {
 			// come confronto cronologico, senza bisogno di crearne oggetti Date.
 			if (todayStr < startDate || todayStr > note.dueDate) return false;
 
-			const resolved = this.getResolvedSlotsForToday(note.id);
+			const resolved = this.getResolvedSlotsForToday(note.id, note.reminderStartTimes);
 			const nowHHMM = this.getCurrentHHMM();
 			return note.reminderStartTimes.some((t) => t <= nowHHMM && !resolved.has(t));
 		}
@@ -840,12 +840,30 @@ export default class QuickNotesBoardPlugin extends Plugin {
 
 	/** Gli orari (HH:MM) già risolti oggi per questa nota, per il sistema "più orari nello
 	 * stesso giorno" — si azzera da solo (nuovo Set vuoto) quando cambia il giorno
-	 * rispetto all'ultima volta registrata. */
-	private getResolvedSlotsForToday(noteId: string): Set<string> {
+	 * rispetto all'ultima volta registrata.
+	 *
+	 * Le mappe di stato sono solo in memoria e non sopravvivono alla chiusura di Obsidian
+	 * (o al ricaricamento del plugin): quando si crea un ingresso "fresco" per oggi — sia
+	 * per cambio giorno sia perché è il primo controllo dopo un riavvio — qualunque orario
+	 * già strettamente passato in quel momento viene marcato subito come risolto, SENZA
+	 * far suonare nulla. Altrimenti un riavvio a metà giornata (es. Obsidian chiuso dalle
+	 * 8:00 alle 10:40) farebbe squillare con ore di ritardo una sveglia il cui orario
+	 * previsto è già passato da tempo — esattamente il comportamento "inspiegabile"
+	 * segnalato: suona a un orario qualunque invece che solo agli orari previsti.
+	 * Gli orari ancora futuri al momento del riavvio restano regolarmente in attesa e
+	 * scattano puntuali quando arrivano (compreso il caso limite di un riavvio nello
+	 * stesso identico minuto dell'orario previsto: `<`, non `<=`, per non "mangiarselo"). */
+	private getResolvedSlotsForToday(noteId: string, reminderStartTimes?: string[]): Set<string> {
 		const todayStr = this.getTodayDateStr();
 		const entry = this.resolvedAlarmSlots.get(noteId);
 		if (!entry || entry.date !== todayStr) {
 			const fresh = { date: todayStr, times: new Set<string>() };
+			if (reminderStartTimes && reminderStartTimes.length > 0) {
+				const nowHHMM = this.getCurrentHHMM();
+				for (const t of reminderStartTimes) {
+					if (t < nowHHMM) fresh.times.add(t);
+				}
+			}
 			this.resolvedAlarmSlots.set(noteId, fresh);
 			return fresh.times;
 		}
@@ -931,7 +949,7 @@ export default class QuickNotesBoardPlugin extends Plugin {
 
 		const note = this.notes.find((n) => n.id === noteId);
 		if (note?.reminderStartTimes && note.reminderStartTimes.length > 0) {
-			const resolved = this.getResolvedSlotsForToday(noteId);
+			const resolved = this.getResolvedSlotsForToday(noteId, note.reminderStartTimes);
 			const nowHHMM = this.getCurrentHHMM();
 			for (const t of note.reminderStartTimes) {
 				if (t <= nowHHMM) resolved.add(t);
