@@ -1097,17 +1097,17 @@ export class BoardActivityModal extends Modal {
 				this.modalEl.setCssStyles({ height: `${Math.max(400, newHeight)}px` });
 			};
 
-			const onUp = async () => {
+			const onUp = () => {
 				window.removeEventListener("mousemove", onMove);
 				window.removeEventListener("mouseup", onUp);
-				await this.plugin.setActivityChartWindowSize(
+				void this.plugin.setActivityChartWindowSize(
 					this.modalEl.offsetWidth,
 					this.modalEl.offsetHeight
 				);
 			};
 
 			window.addEventListener("mousemove", onMove);
-			window.addEventListener("mouseup", () => void onUp());
+			window.addEventListener("mouseup", onUp);
 		});
 	}
 
@@ -2131,14 +2131,14 @@ export class BoardStructureModal extends Modal {
 				this.modalEl.setCssStyles({ width: `${Math.max(480, newWidth)}px` });
 				this.modalEl.setCssStyles({ height: `${Math.max(400, newHeight)}px` });
 			};
-			const onUp = async () => {
+			const onUp = () => {
 				window.removeEventListener("mousemove", onMove);
 				window.removeEventListener("mouseup", onUp);
-				await this.plugin.setBoardStructureWindowSize(this.modalEl.offsetWidth, this.modalEl.offsetHeight);
+				void this.plugin.setBoardStructureWindowSize(this.modalEl.offsetWidth, this.modalEl.offsetHeight);
 			};
 
 			window.addEventListener("mousemove", onMove);
-			window.addEventListener("mouseup", () => void onUp());
+			window.addEventListener("mouseup", onUp);
 		});
 	}
 

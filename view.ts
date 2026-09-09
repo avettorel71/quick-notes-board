@@ -268,7 +268,7 @@ export class QuickNotesBoardView extends ItemView {
 		const tidyUpBtn = toolbar.createEl("button", { cls: "qnb-btn" });
 		setIcon(tidyUpBtn.createSpan({ cls: "qnb-btn-icon" }), "layout-grid");
 		tidyUpBtn.createSpan({ text: this.tr("view.tidyUp") });
-		tidyUpBtn.addEventListener("click", () => this.tidyUpNotes());
+		tidyUpBtn.addEventListener("click", () => void this.tidyUpNotes());
 
 		const archiveBtn = toolbar.createEl("button", { cls: "qnb-btn" });
 		setIcon(archiveBtn.createSpan({ cls: "qnb-btn-icon" }), "archive");
@@ -861,7 +861,8 @@ export class QuickNotesBoardView extends ItemView {
 	}
 
 	private openNewNoteModal() {
-		new NewNoteModal(this.app, this.plugin, this.plugin.settings.categories, async (title, category, groupId) => {
+		new NewNoteModal(this.app, this.plugin, this.plugin.settings.categories, (title, category, groupId) => {
+			void (async () => {
 			const offset = (this.plugin.notes.length % 8) * 24;
 			const note: QuickNote = {
 				id: cryptoRandomId(),
@@ -890,6 +891,7 @@ export class QuickNotesBoardView extends ItemView {
 			await this.plugin.saveNotes();
 			this.refreshVisibilityButtons();
 			this.renderBoard();
+			})();
 		}).open();
 	}
 
@@ -1156,19 +1158,21 @@ export class QuickNotesBoardView extends ItemView {
 			firstNote?.category || "Generale",
 			firstNote?.groupId || "",
 			this.plugin.settings.categories,
-			async (newCategory, newGroupId) => {
-				for (const note of this.plugin.notes) {
-					if (this.selectedNoteIds.has(note.id)) {
-						note.category = newCategory;
-						note.groupId = newGroupId;
+			(newCategory, newGroupId) => {
+				void (async () => {
+					for (const note of this.plugin.notes) {
+						if (this.selectedNoteIds.has(note.id)) {
+							note.category = newCategory;
+							note.groupId = newGroupId;
+						}
 					}
-				}
-				const count = this.selectedNoteIds.size;
-				this.selectedNoteIds.clear();
-				await this.plugin.saveNotes();
-				this.refreshVisibilityButtons();
-				this.renderBoard();
-				new Notice(this.tr("view.selection.categoryDone", { count: String(count) }));
+					const count = this.selectedNoteIds.size;
+					this.selectedNoteIds.clear();
+					await this.plugin.saveNotes();
+					this.refreshVisibilityButtons();
+					this.renderBoard();
+					new Notice(this.tr("view.selection.categoryDone", { count: String(count) }));
+				})();
 			}
 		).open();
 	}
@@ -1378,13 +1382,15 @@ export class QuickNotesBoardView extends ItemView {
 							note.category,
 							note.groupId,
 							this.plugin.settings.categories,
-							async (newCategory, newGroupId) => {
-								if (newCategory === note.category && newGroupId === note.groupId) return;
-								note.category = newCategory;
-								note.groupId = newGroupId;
-								await this.plugin.saveNotes();
-								this.refreshVisibilityButtons();
-								this.renderBoard();
+							(newCategory, newGroupId) => {
+								void (async () => {
+									if (newCategory === note.category && newGroupId === note.groupId) return;
+									note.category = newCategory;
+									note.groupId = newGroupId;
+									await this.plugin.saveNotes();
+									this.refreshVisibilityButtons();
+									this.renderBoard();
+								})();
 							}
 						).open();
 					} catch (e) {
@@ -1898,16 +1904,16 @@ export class QuickNotesBoardView extends ItemView {
 			noteEl.setCssProps({ "--qnb-note-y": `${note.y}px` });
 		};
 
-		const onUp = async () => {
+		const onUp = () => {
 			window.removeEventListener("mousemove", onMove);
 			window.removeEventListener("mouseup", onUp);
 			handle.removeClass("is-resizing");
 			noteEl.removeClass("is-dragging");
-			await this.plugin.saveNotes();
+			void this.plugin.saveNotes();
 		};
 
 		window.addEventListener("mousemove", onMove);
-		window.addEventListener("mouseup", () => void onUp());
+		window.addEventListener("mouseup", onUp);
 	}
 
 	private startTitleEdit(titleEl: HTMLElement, note: QuickNote) {
@@ -2131,7 +2137,7 @@ export class QuickNotesBoardView extends ItemView {
 					img.setCssStyles({ width: `${newWidth}px` });
 				};
 
-				const onUp = async () => {
+				const onUp = () => {
 					window.removeEventListener("mousemove", onMove);
 					window.removeEventListener("mouseup", onUp);
 					wrapper.removeClass("is-resizing-image");
@@ -2140,11 +2146,11 @@ export class QuickNotesBoardView extends ItemView {
 					const target = match[1];
 					note.content = replaceEmbedAtIndex(note.content, domIndex, `![[${target}|${finalWidth}]]`);
 					note.modifiedAt = Date.now();
-					await this.plugin.saveNotes();
+					void this.plugin.saveNotes();
 				};
 
 				window.addEventListener("mousemove", onMove);
-				window.addEventListener("mouseup", () => void onUp());
+				window.addEventListener("mouseup", onUp);
 			});
 		});
 
@@ -2476,7 +2482,7 @@ export class QuickNotesBoardView extends ItemView {
 			}
 		};
 
-		const onUp = async () => {
+		const onUp = () => {
 			window.removeEventListener("mousemove", onMove);
 			window.removeEventListener("mouseup", onUp);
 			noteEl.removeClass("is-dragging");
@@ -2488,13 +2494,13 @@ export class QuickNotesBoardView extends ItemView {
 			}
 
 			if (this.dragState) {
-				await this.plugin.saveNotes();
+				void this.plugin.saveNotes();
 			}
 			this.dragState = null;
 		};
 
 		window.addEventListener("mousemove", onMove);
-		window.addEventListener("mouseup", () => void onUp());
+		window.addEventListener("mouseup", onUp);
 	}
 
 	/** Riproduce il piccolo "assestamento elastico" su una nota appena rilasciata dal
