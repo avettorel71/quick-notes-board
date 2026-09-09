@@ -1735,13 +1735,17 @@ export class AlarmListModal extends Modal {
 					: note.reminderStartTime || "";
 			row.createDiv({ text: displayTime });
 
-			// Per le note con più orari, il tempo rimasto è calcolato sul primo orario
-			// del giorno (già in ordine crescente al salvataggio) — un'indicazione
-			// ragionevole di "quanto manca al prossimo allarme", non un conteggio
-			// esatto per ognuno dei singoli orari successivi.
+			// Per le note con più orari, il tempo rimasto va calcolato sul prossimo orario
+			// non ancora passato (l'array è già in ordine crescente al salvataggio) — non
+			// sul primo in assoluto, altrimenti appena il primo allarme suona la colonna
+			// resterebbe ancorata a quell'orario ormai trascorso e mostrerebbe "scaduto"
+			// anche quando un allarme successivo dello stesso giorno deve ancora suonare.
+			// Se sono già passati tutti, si usa l'ultimo (mostra correttamente "scaduto").
 			const timeForCountdown =
 				note.reminderStartTimes && note.reminderStartTimes.length > 0
-					? note.reminderStartTimes[0]
+					? (note.reminderStartTimes.find(
+							(t) => new Date(`${note.dueDate}T${t}:00`).getTime() > Date.now()
+						) ?? note.reminderStartTimes[note.reminderStartTimes.length - 1])
 					: note.reminderStartTime;
 			row.createDiv({
 				text: formatTimeRemaining(note.dueDate || "", timeForCountdown, (key, vars) => this.tr(key, vars)),
