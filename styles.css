@@ -99,7 +99,7 @@
 	flex-shrink: 0;
 }
 
-.qnb-category-btn:has(+ .qnb-group-menu-btn) {
+.qnb-category-btn.qnb-has-group-menu {
 	border-top-right-radius: 0;
 	border-bottom-right-radius: 0;
 }

@@ -381,6 +381,7 @@ export class QuickNotesBoardView extends ItemView {
 			});
 
 			if (cat.groups.length > 0) {
+				catBtn.addClass("qnb-has-group-menu");
 				const groupMenuBtn = catPair.createEl("button", {
 					cls: "qnb-btn qnb-group-menu-btn",
 					attr: { type: "button", "aria-label": this.tr("view.groupsMenuLabel") },
