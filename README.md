@@ -342,17 +342,23 @@ If [data compression](#data-file-compression) is enabled, the file instead start
 
 ## Screenshots
 
-![Quick Notes Board screenshot 2](Screenshot02.jpg)
-
-![Quick Notes Board screenshot 3](Screenshot03.jpg)
-
-![Quick Notes Board screenshot 4](Screenshot04.jpg)
-
-![Quick Notes Board screenshot 5](Screenshot05.jpg)
+![Quick Notes Board screenshot 6](Screenshot06.jpg)
 
 ---
 
 ## Version history
+
+### 1.0.2
+
+Bug fixes and visual polish, no new features.
+
+- Fixed note resizing from the left edge: after moving (dragging) a note and then resizing it from its left handle, the left border could stay stuck in place instead of moving, while the right border moved instead — caused by a positioning inconsistency between dragging and resizing. Dragging now uses the same positioning method as resizing, so this can no longer happen.
+- Fixed the Alarms list's "time remaining" countdown showing "0d 0h 0m" for alarms less than a minute away (most noticeable with multiple daily times set only a few minutes apart) — now shows "Less than 1 minute" instead.
+- Fixed the toolbar's Trash/Archive buttons showing their icon stacked above the text instead of beside it.
+- Fixed the small arrow that expands a category's groups/subgroups losing its icon after the above fix.
+- Fixed the categories row sitting too close to the toolbar's top border, and the group-expand arrow visually overlapping the category button next to it — both are now properly spaced and cleanly merged into a single control.
+- Category buttons in the toolbar now use a fixed white border/text color while inactive, for consistent readability regardless of the category's own color (which some users found hard to read); active categories are unaffected and still show their own color as before.
+- Added a GitHub Actions workflow that automatically builds, attests, and publishes a release (with `main.js`, `manifest.json`, `styles.css`) whenever a version tag is pushed.
 
 ### 1.0.1
 

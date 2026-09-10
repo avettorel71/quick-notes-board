@@ -267,6 +267,7 @@ const it: Dict = {
 	"modal.alarmList.colRemaining": "Tempo rimasto",
 	"modal.alarmList.remaining": "{days}g {hours}h {minutes}m",
 	"modal.alarmList.overdue": "Scaduto",
+	"modal.alarmList.lessThanAMinute": "Meno di 1 minuto",
 
 	"modal.boardActivity.title": "Andamento della board",
 	"modal.boardActivity.notesChart": "Note create per giorno",
@@ -730,6 +731,7 @@ const en: Dict = {
 	"modal.alarmList.colRemaining": "Time left",
 	"modal.alarmList.remaining": "{days}d {hours}h {minutes}m",
 	"modal.alarmList.overdue": "Overdue",
+	"modal.alarmList.lessThanAMinute": "Less than 1 minute",
 
 	"modal.boardActivity.title": "Board activity",
 	"modal.boardActivity.notesChart": "Notes created per day",

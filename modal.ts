@@ -1343,6 +1343,11 @@ function formatTimeRemaining(
 	if (diffMs <= 0) return tr("modal.alarmList.overdue");
 
 	const totalMinutes = Math.floor(diffMs / 60000);
+	// Sotto il minuto, "0g 0h 0m" sembrerebbe un countdown rotto: distinguiamo
+	// esplicitamente questo caso (capita con orari molto ravvicinati, es. test a 2
+	// minuti di distanza, dove il tempo residuo scende sotto il minuto pur essendo
+	// ancora valido e non scaduto).
+	if (totalMinutes <= 0) return tr("modal.alarmList.lessThanAMinute");
 	const days = Math.floor(totalMinutes / (24 * 60));
 	const hours = Math.floor((totalMinutes % (24 * 60)) / 60);
 	const minutes = totalMinutes % 60;

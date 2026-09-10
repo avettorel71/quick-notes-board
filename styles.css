@@ -18,7 +18,7 @@
 	flex-wrap: wrap;
 	align-items: center;
 	gap: 8px;
-	padding: 0 12px 8px;
+	padding: 8px 12px;
 	max-height: 112px;
 	overflow-y: auto;
 	border-bottom: 1px solid var(--background-modifier-border);
@@ -99,7 +99,12 @@
 	flex-shrink: 0;
 }
 
-button.qnb-btn.qnb-btn {
+.qnb-category-btn:has(+ .qnb-group-menu-btn) {
+	border-top-right-radius: 0;
+	border-bottom-right-radius: 0;
+}
+
+button.qnb-btn {
 	display: flex;
 	flex-direction: row;
 	align-items: center;
@@ -117,7 +122,7 @@ button.qnb-btn.qnb-btn {
 	background: var(--interactive-hover);
 }
 
-.qnb-btn-primary {
+button.qnb-btn-primary {
 	background: var(--interactive-accent);
 	color: var(--text-on-accent);
 	border-color: var(--interactive-accent);
@@ -127,7 +132,7 @@ button.qnb-btn.qnb-btn {
 	background: var(--interactive-accent-hover);
 }
 
-.qnb-btn-close {
+button.qnb-btn-close {
 	color: var(--text-muted);
 	margin-left: auto;
 }
@@ -138,9 +143,9 @@ button.qnb-btn.qnb-btn {
 	border-color: var(--background-modifier-error);
 }
 
-.qnb-category-btn {
-	border-color: var(--qnb-cat-color, var(--background-modifier-border));
-	color: var(--qnb-cat-color, var(--text-normal));
+button.qnb-category-btn {
+	border-color: #ffffff;
+	color: #ffffff;
 	background: transparent;
 	opacity: 0.55;
 }
@@ -155,21 +160,31 @@ button.qnb-btn.qnb-btn {
 	opacity: 1;
 }
 
-.qnb-group-menu-btn {
+button.qnb-group-menu-btn {
 	display: flex;
 	align-items: center;
 	justify-content: center;
 	width: 22px;
 	padding: 0;
-	margin-left: -4px;
-	border-color: var(--qnb-cat-color, var(--background-modifier-border));
-	color: var(--qnb-cat-color, var(--text-muted));
+	margin-left: 0;
+	border-left: none;
+	border-top-left-radius: 0;
+	border-bottom-left-radius: 0;
+	border-color: #ffffff;
+	color: #ffffff;
 	background: transparent;
 	opacity: 0.55;
 }
 
 .qnb-group-menu-btn:hover {
 	opacity: 0.9;
+}
+
+.qnb-category-btn.is-active + button.qnb-group-menu-btn {
+	border-color: var(--qnb-cat-color, var(--background-modifier-border));
+	background: var(--qnb-cat-color, var(--interactive-accent));
+	color: var(--qnb-cat-fg, var(--text-on-accent));
+	opacity: 1;
 }
 
 .qnb-group-menu-btn svg {

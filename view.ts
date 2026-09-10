@@ -1849,6 +1849,12 @@ export class QuickNotesBoardView extends ItemView {
 
 	private addResizeHandle(noteEl: HTMLElement, note: QuickNote, dir: "e" | "w" | "s" | "se" | "sw") {
 		const handle = noteEl.createDiv({ cls: `qnb-resize-handle qnb-resize-${dir}` });
+		// Porta la nota in primo piano già al passaggio del mouse sulla maniglia (non solo
+		// al click): se due note si sovrappongono, l'ordine di sovrapposizione con cui il
+		// browser assegna il click a un elemento è già deciso PRIMA che il gestore del
+		// mousedown venga eseguito. Aggiornandolo solo al click si rischia quindi di
+		// afferrare per errore la maniglia della nota sottostante invece di quella attiva.
+		handle.addEventListener("mouseenter", () => this.bringToFront(note, noteEl));
 		handle.addEventListener("mousedown", (evt: MouseEvent) => this.startResize(evt, note, noteEl, dir, handle));
 	}
 
@@ -2469,8 +2475,13 @@ export class QuickNotesBoardView extends ItemView {
 			const newY = Math.max(0, this.dragState.origY + dy);
 			this.dragState.note.x = newX;
 			this.dragState.note.y = newY;
-			this.dragState.el.setCssStyles({ left: `${newX}px` });
-			this.dragState.el.setCssStyles({ top: `${newY}px` });
+			// Stessa variabile CSS usata dal ridimensionamento e dal render iniziale (non
+			// left/top diretti): altrimenti un valore scritto direttamente qui resterebbe
+			// "bloccato" e vincerebbe sempre sulla regola CSS basata sulla variabile,
+			// impedendo al bordo sinistro di muoversi durante un ridimensionamento
+			// successivo a uno spostamento.
+			this.dragState.el.setCssProps({ "--qnb-note-x": `${newX}px` });
+			this.dragState.el.setCssProps({ "--qnb-note-y": `${newY}px` });
 
 			// Trascinamento di gruppo: stessa quantità di spostamento per tutte le altre
 			// note selezionate, ognuna dalla propria posizione di partenza.
@@ -2479,8 +2490,8 @@ export class QuickNotesBoardView extends ItemView {
 				const exY = Math.max(0, extra.origY + dy);
 				extra.note.x = exX;
 				extra.note.y = exY;
-				extra.el.setCssStyles({ left: `${exX}px` });
-				extra.el.setCssStyles({ top: `${exY}px` });
+				extra.el.setCssProps({ "--qnb-note-x": `${exX}px` });
+				extra.el.setCssProps({ "--qnb-note-y": `${exY}px` });
 			}
 		};
 
