@@ -95,7 +95,7 @@
 
 .qnb-category-pair {
 	display: flex;
-	align-items: center;
+	align-items: stretch;
 	flex-shrink: 0;
 }
 
@@ -167,7 +167,6 @@ button.qnb-group-menu-btn {
 	width: 22px;
 	padding: 0;
 	margin-left: 0;
-	border-left: none;
 	border-top-left-radius: 0;
 	border-bottom-left-radius: 0;
 	border-color: #ffffff;
@@ -177,11 +176,10 @@ button.qnb-group-menu-btn {
 }
 
 .qnb-group-menu-btn:hover {
-	opacity: 0.9;
+	opacity: 0.85;
 }
 
 .qnb-category-btn.is-active + button.qnb-group-menu-btn {
-	border-color: var(--qnb-cat-color, var(--background-modifier-border));
 	background: var(--qnb-cat-color, var(--interactive-accent));
 	color: var(--qnb-cat-fg, var(--text-on-accent));
 	opacity: 1;
@@ -1729,5 +1727,35 @@ button.qnb-group-menu-btn {
 .qnb-note-info-label-chip {
 	display: inline-flex;
 	align-items: center;
+	font-size: 0.9em;
+}
+
+.qnb-missed-reminders-list {
+	margin: 8px 0 4px;
+	padding-left: 20px;
+}
+
+.qnb-missed-reminders-list li {
+	margin: 4px 0;
+}
+
+.qnb-missed-reminders-note {
+	margin: 0 0 14px;
+	padding-bottom: 10px;
+	border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.qnb-missed-reminders-note:last-of-type {
+	border-bottom: none;
+}
+
+.qnb-missed-reminders-note-title {
+	margin: 0 0 4px;
+	font-weight: 600;
+}
+
+.qnb-missed-reminders-advanced {
+	margin: 6px 0 0;
+	color: var(--text-accent);
 	font-size: 0.9em;
 }

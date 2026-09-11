@@ -1375,7 +1375,7 @@ function formatDate(d: Date): string {
  * scelta, mantenendo la stessa distanza (in giorni) tra i due e lo stesso orario.
  * Gestisce correttamente i mesi più corti e gli anni bisestili (es. 31 gennaio + 1
  * mese non deve mai "sforare" a marzo: si ferma al 28/29 febbraio). */
-function addRepeatInterval(
+export function addRepeatInterval(
 	dueDate: string,
 	reminderStartDate: string,
 	repeat: "daily" | "weekly" | "monthly" | "yearly",
@@ -2262,6 +2262,68 @@ export class LabelAssignModal extends Modal {
 
 		new Setting(contentEl).addButton((btn) =>
 			btn.setButtonText(this.tr("trash.close")).onClick(() => this.close())
+		);
+	}
+
+	onClose() {
+		this.contentEl.empty();
+	}
+}
+
+/** Mostra l'elenco degli allarmi con orario già passato al momento dell'ultimo
+ * riavvio/apertura di Obsidian, senza aver suonato: una finestra vera e propria
+ * (non una notifica che sparisce da sola dopo pochi secondi) che l'utente chiude
+ * quando ha finito di leggerla. */
+export class MissedRemindersModal extends Modal {
+	private plugin: QuickNotesBoardPlugin;
+	private items: { title: string; missedDays: { date: string; times: string[] }[]; newDate: string }[];
+
+	constructor(
+		app: App,
+		plugin: QuickNotesBoardPlugin,
+		items: { title: string; missedDays: { date: string; times: string[] }[]; newDate: string }[]
+	) {
+		super(app);
+		this.plugin = plugin;
+		this.items = items;
+	}
+
+	private tr(key: string, vars?: Record<string, string>): string {
+		return t(this.plugin.settings.language, key, vars);
+	}
+
+	onOpen() {
+		const { contentEl } = this;
+		contentEl.empty();
+		new Setting(contentEl).setName(this.tr("modal.missedReminders.title")).setHeading();
+		contentEl.createEl("p", {
+			cls: "setting-item-description",
+			text: this.tr("modal.missedReminders.description"),
+		});
+
+		for (const item of this.items) {
+			const block = contentEl.createDiv({ cls: "qnb-missed-reminders-note" });
+			block.createEl("p", { cls: "qnb-missed-reminders-note-title", text: item.title });
+			const list = block.createEl("ul", { cls: "qnb-missed-reminders-list" });
+			for (const day of item.missedDays) {
+				list.createEl("li", {
+					text: this.tr("modal.missedReminders.dayLine", {
+						date: day.date,
+						times: day.times.join(", "),
+					}),
+				});
+			}
+			block.createEl("p", {
+				cls: "qnb-missed-reminders-advanced",
+				text: this.tr("modal.missedReminders.advancedTo", { date: item.newDate }),
+			});
+		}
+
+		new Setting(contentEl).addButton((btn) =>
+			btn
+				.setButtonText(this.tr("trash.close"))
+				.setCta()
+				.onClick(() => this.close())
 		);
 	}
 

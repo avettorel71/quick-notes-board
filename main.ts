@@ -1,4 +1,5 @@
 import { Plugin, WorkspaceLeaf, normalizePath, Notice } from "obsidian";
+import { MissedRemindersModal, addRepeatInterval } from "./modal";
 
 // Compressione del file dati: etichetta riconoscibile all'inizio del file quando è
 // compresso. La lettura si basa SEMPRE su questa etichetta, mai sull'impostazione
@@ -286,6 +287,7 @@ export default class QuickNotesBoardPlugin extends Plugin {
 	 * per lo stesso slot — solo al prossimo orario della lista. Si azzera da solo quando
 	 * cambia il giorno (confronto sulla data salvata insieme). Solo in memoria. */
 	private resolvedAlarmSlots = new Map<string, { date: string; times: Set<string> }>();
+	private pendingMissedAlarms: { title: string; missedDays: { date: string; times: string[] }[]; newDate: string }[] = [];
 	/** true se il file dati risulta compresso ma non decomprimibile (danneggiato): in
 	 * questo stato saveNotes() si rifiuta di scrivere, per non perdere i dati originali. */
 	private dataFileCorrupted = false;
@@ -813,9 +815,13 @@ export default class QuickNotesBoardPlugin extends Plugin {
 			const todayStr = this.getTodayDateStr();
 			// Confronto testuale su date in formato YYYY-MM-DD: funziona correttamente
 			// come confronto cronologico, senza bisogno di crearne oggetti Date.
-			if (todayStr < startDate || todayStr > note.dueDate) return false;
+			// Solo il limite inferiore blocca (la nota non è ancora iniziata): il limite
+			// superiore non c'è più, perché una nota il cui giorno programmato è nel
+			// passato non deve "spegnersi" per sempre — getResolvedSlotsForToday la fa
+			// avanzare da sola al prossimo giorno utile (vedi lì per i dettagli).
+			if (todayStr < startDate) return false;
 
-			const resolved = this.getResolvedSlotsForToday(note.id, note.reminderStartTimes);
+			const resolved = this.getResolvedSlotsForToday(note);
 			const nowHHMM = this.getCurrentHHMM();
 			return note.reminderStartTimes.some((t) => t <= nowHHMM && !resolved.has(t));
 		}
@@ -846,28 +852,116 @@ export default class QuickNotesBoardPlugin extends Plugin {
 	 * (o al ricaricamento del plugin): quando si crea un ingresso "fresco" per oggi — sia
 	 * per cambio giorno sia perché è il primo controllo dopo un riavvio — qualunque orario
 	 * già strettamente passato in quel momento viene marcato subito come risolto, SENZA
-	 * far suonare nulla. Altrimenti un riavvio a metà giornata (es. Obsidian chiuso dalle
-	 * 8:00 alle 10:40) farebbe squillare con ore di ritardo una sveglia il cui orario
-	 * previsto è già passato da tempo — esattamente il comportamento "inspiegabile"
-	 * segnalato: suona a un orario qualunque invece che solo agli orari previsti.
+	 * far suonare nulla (altrimenti un riavvio a metà giornata farebbe squillare con ore
+	 * di ritardo una sveglia il cui orario previsto è già passato da tempo). Questi orari
+	 * "persi" vengono però messi in coda per un'unica notifica riepilogativa silenziosa
+	 * (vedi queueMissedAlarmNotice), così non spariscono senza lasciare traccia.
 	 * Gli orari ancora futuri al momento del riavvio restano regolarmente in attesa e
 	 * scattano puntuali quando arrivano (compreso il caso limite di un riavvio nello
-	 * stesso identico minuto dell'orario previsto: `<`, non `<=`, per non "mangiarselo"). */
-	private getResolvedSlotsForToday(noteId: string, reminderStartTimes?: string[]): Set<string> {
+	 * stesso identico minuto dell'orario previsto: `<`, non `<=`, per non "mangiarselo").
+	 *
+	 * Oltre agli orari di oggi, recupera anche giorni INTERI persi (nota rimasta
+	 * indietro di uno o più giorni perché Obsidian non è stato aperto): avanza da sola,
+	 * un giorno alla volta, finché non trova un giorno con almeno un orario ancora
+	 * futuro (o oggi stesso, se non tutti gli orari di oggi sono già passati) — così una
+	 * sveglia multi-orario resta "viva" indefinitamente invece di spegnersi per sempre
+	 * dopo il primo giorno saltato. Ogni giorno recuperato viene messo in coda per la
+	 * finestra dei promemoria mancati (vedi queueMissedAlarmNotice).
+	 *
+	 * Il controllo "giornata esaurita" qui avviene solo alla primissima occasione del
+	 * giorno per questa nota (poi la cache resta valida fino a domani): se quella prima
+	 * occasione capita quando la giornata NON è ancora esaurita (es. apri la board alle
+	 * 9:20 con un orario delle 10:00 ancora da venire), l'avanzamento non scatta più da
+	 * solo per il resto della giornata. Per questo checkStaleRemindersNow (richiamata ad
+	 * ogni apertura della board, non solo alla prima del giorno) rifà lo stesso controllo
+	 * indipendentemente da questa cache. */
+	private getResolvedSlotsForToday(note: QuickNote): Set<string> {
+		const { id: noteId, reminderStartTimes } = note;
 		const todayStr = this.getTodayDateStr();
 		const entry = this.resolvedAlarmSlots.get(noteId);
-		if (!entry || entry.date !== todayStr) {
-			const fresh = { date: todayStr, times: new Set<string>() };
-			if (reminderStartTimes && reminderStartTimes.length > 0) {
-				const nowHHMM = this.getCurrentHHMM();
-				for (const t of reminderStartTimes) {
-					if (t < nowHHMM) fresh.times.add(t);
-				}
+		if (entry && entry.date === todayStr) return entry.times;
+
+		this.catchUpNoteIfExhausted(note); // può avanzare note.dueDate se già tutta scaduta
+
+		const fresh = { date: todayStr, times: new Set<string>() };
+		if (reminderStartTimes && reminderStartTimes.length > 0 && note.dueDate === todayStr) {
+			const nowHHMM = this.getCurrentHHMM();
+			for (const t of reminderStartTimes) {
+				if (t < nowHHMM) fresh.times.add(t);
 			}
-			this.resolvedAlarmSlots.set(noteId, fresh);
-			return fresh.times;
 		}
-		return entry.times;
+		this.resolvedAlarmSlots.set(noteId, fresh);
+		return fresh.times;
+	}
+
+	/** Verifica una singola nota multi-orario per giorni/orari interi ormai scaduti (a
+	 * partire dal suo dueDate attuale) e, se ne trova, la avanza al prossimo giorno
+	 * ancora utile e mette in coda l'avviso — indipendentemente da eventuali controlli
+	 * già fatti oggi. Ritorna true se ha trovato ed elaborato qualcosa da recuperare. */
+	private catchUpNoteIfExhausted(note: QuickNote): boolean {
+		const { reminderStartTimes } = note;
+		if (!reminderStartTimes || reminderStartTimes.length === 0) return false;
+
+		const todayStr = this.getTodayDateStr();
+		const nowHHMM = this.getCurrentHHMM();
+		const missedDays: { date: string; times: string[] }[] = [];
+		let cursor = note.dueDate || todayStr;
+		let guard = 0; // paracadute anti-loop-infinito: non dovrebbe mai servire
+		while (guard++ < 3650 && cursor <= todayStr) {
+			const isToday = cursor === todayStr;
+			const allPassedThatDay = isToday ? reminderStartTimes.every((t) => t < nowHHMM) : true;
+			if (!allPassedThatDay) break; // oggi, con almeno un orario ancora futuro: fermati qui
+			missedDays.push({ date: cursor, times: [...reminderStartTimes] });
+			cursor = addRepeatInterval(cursor, cursor, "daily", 1).dueDate;
+		}
+		if (missedDays.length === 0) return false;
+
+		note.dueDate = cursor;
+		if (note.reminderStartDate) note.reminderStartDate = cursor;
+		void this.saveNotes();
+		this.queueMissedAlarmNotice(note.title, missedDays, cursor);
+		// La nota ora è programmata su un altro giorno: l'eventuale cache di oggi non è
+		// più valida (verrà ricreata da zero alla prossima chiamata di
+		// getResolvedSlotsForToday, quando servirà davvero).
+		this.resolvedAlarmSlots.delete(note.id);
+		return true;
+	}
+
+	/** Ricontrolla TUTTE le note multi-orario per giorni/orari ormai scaduti, anche se
+	 * erano già state controllate in precedenza oggi — a differenza del normale
+	 * controllo periodico (checkDueReminders), che lo fa solo alla primissima occasione
+	 * del giorno per ciascuna nota. Va richiamata quando l'utente apre effettivamente la
+	 * board (vedi QuickNotesBoardView.onOpen), per recuperare anche una giornata che si
+	 * esaurisce DOPO la prima apertura mattutina. */
+	checkStaleRemindersNow() {
+		for (const note of this.notes) {
+			if (note.deleted || note.archived || !note.dueDate) continue;
+			this.catchUpNoteIfExhausted(note);
+		}
+	}
+
+	/** Mette in coda i giorni persi di una nota (con l'elenco orari di ciascuno) e la
+	 * nuova data a cui è stata avanzata automaticamente. A differenza dell'allarme vero e
+	 * proprio (che deve scattare comunque, anche a board chiusa), l'avviso di quanto
+	 * perso viene mostrato SOLO quando l'utente apre effettivamente la board — vedi
+	 * flushMissedAlarmNotice, richiamata da QuickNotesBoardView.onOpen. */
+	private queueMissedAlarmNotice(
+		title: string,
+		missedDays: { date: string; times: string[] }[],
+		newDate: string
+	) {
+		this.pendingMissedAlarms.push({ title, missedDays, newDate });
+	}
+
+	/** Se ci sono orari persi accumulati (da un'apertura precedente all'apertura della
+	 * board), mostra la finestra col relativo elenco e la svuota. Richiamata
+	 * dall'apertura della board, non da un timer: non deve mai comparire mentre l'utente
+	 * sta semplicemente usando Obsidian per altro. */
+	flushMissedAlarmNotice() {
+		if (this.pendingMissedAlarms.length === 0) return;
+		const items = this.pendingMissedAlarms;
+		this.pendingMissedAlarms = [];
+		new MissedRemindersModal(this.app, this, items).open();
 	}
 
 	/** Gira a intervalli regolari finché il plugin è attivo (non la sola vista board):
@@ -949,7 +1043,7 @@ export default class QuickNotesBoardPlugin extends Plugin {
 
 		const note = this.notes.find((n) => n.id === noteId);
 		if (note?.reminderStartTimes && note.reminderStartTimes.length > 0) {
-			const resolved = this.getResolvedSlotsForToday(noteId, note.reminderStartTimes);
+			const resolved = this.getResolvedSlotsForToday(note);
 			const nowHHMM = this.getCurrentHHMM();
 			for (const t of note.reminderStartTimes) {
 				if (t <= nowHHMM) resolved.add(t);

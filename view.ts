@@ -82,6 +82,8 @@ export class QuickNotesBoardView extends ItemView {
 		this.plugin.playSound("board-open");
 		document.addEventListener("keydown", this.clearSelectionOnEscapeBound);
 		await this.rebuild();
+		this.plugin.checkStaleRemindersNow();
+		this.plugin.flushMissedAlarmNotice();
 	}
 
 	async onClose() {
@@ -2190,6 +2192,15 @@ export class QuickNotesBoardView extends ItemView {
 	 * perché il testo reso a schermo e quello grezzo non coincidono sempre carattere per
 	 * carattere. Ritorna null se il browser non supporta l'API necessaria, o il punto non
 	 * cade su testo: in quel caso resta il comportamento di sempre (cursore a fine testo). */
+	/** Tag che nel testo grezzo corrispondono sempre all'inizio di una nuova riga
+	 * (paragrafo, voce di lista, titolo, citazione, blocco di codice, riga di tabella,
+	 * separatore). Non include contenitori come DIV/UL/OL/TABLE: i loro figli diretti
+	 * (P/LI/TR ecc.) già segnano la riga, contarli anche sul contenitore duplicherebbe
+	 * l'a-capo. */
+	private static readonly BLOCK_LINE_TAGS = new Set([
+		"P", "LI", "H1", "H2", "H3", "H4", "H5", "H6", "BLOCKQUOTE", "PRE", "HR", "TR",
+	]);
+
 	private getClickOffsetInRenderedBody(bodyEl: HTMLElement, clientX: number, clientY: number): number | null {
 		// Cast passando per `unknown`, non per un'intersezione con `Document`: così la
 		// proprietà si risolve solo su questo tipo locale, che non porta il tag
@@ -2219,14 +2230,33 @@ export class QuickNotesBoardView extends ItemView {
 
 		if (!node || !bodyEl.contains(node)) return null;
 
-		const walker = document.createTreeWalker(bodyEl, NodeFilter.SHOW_TEXT);
+		// Cammina su testo ED elementi (non solo sul testo): serve per accorgersi di ogni
+		// cambio di blocco e contare l'"a capo" che nel testo grezzo lo precede, ma che nel
+		// testo renderizzato non esiste come carattere (è solo un confine tra elementi
+		// HTML). Senza questo conteggio, l'offset risultava sistematicamente troppo basso
+		// di un carattere per ogni riga precedente al punto cliccato.
+		const walker = document.createTreeWalker(bodyEl, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT);
 		let total = 0;
+		let sawLine = false;
 		let current = walker.nextNode();
 		while (current) {
 			if (current === node) {
 				return total + offsetInNode;
 			}
-			total += (current.textContent || "").length;
+			if (current.nodeType === Node.TEXT_NODE) {
+				total += (current.textContent || "").length;
+			} else if (current.nodeType === Node.ELEMENT_NODE) {
+				const tag = (current as HTMLElement).tagName;
+				if (tag === "BR") {
+					total += 1;
+				} else if (QuickNotesBoardView.BLOCK_LINE_TAGS.has(tag)) {
+					// L'a capo precede l'inizio del blocco, non lo segue: non contarlo
+					// prima del primissimo blocco incontrato, altrimenti l'offset
+					// partirebbe da 1 invece che da 0 sulla primissima riga della nota.
+					if (sawLine) total += 1;
+					sawLine = true;
+				}
+			}
 			current = walker.nextNode();
 		}
 		return null;

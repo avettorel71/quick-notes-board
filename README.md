@@ -348,6 +348,17 @@ If [data compression](#data-file-compression) is enabled, the file instead start
 
 ## Version history
 
+### 1.0.3
+
+Bug fixes and a new feature for multi-time daily reminders.
+
+- Fixed a CSS warning flagged by Obsidian's plugin review (`:has()` selector, which can cause performance issues) — replaced with an explicit class with no behavior change.
+- Fixed the category button and its group-expand arrow having slightly different heights, which made their shared border not line up cleanly.
+- Fixed an inconsistency where the active/inactive border color didn't match between a category button and its group-expand arrow — both now behave identically: white border while inactive, category-colored border and background while active.
+- Fixed cursor placement when clicking inside a note's rendered text to switch to edit mode: on notes with several lines, the cursor could land on the wrong line entirely, because line/paragraph breaks in the rendered text weren't being counted. It now lands on the correct line; minor precision may still be off by a few characters on lines that contain markdown formatting (bold, links, etc.).
+- New: a dedicated "Missed reminders" window. If one or more scheduled alarm times passed while Obsidian was closed, this window lists what was missed, shown the next time you open the board (instead of a quick, easy-to-miss popup notification).
+- New: reminders with multiple daily times now automatically advance to the next scheduled day once every time for the current day has passed, instead of going silent forever — shown in the "Missed reminders" window together with what was missed. This also catches up correctly if Obsidian hasn't been opened for several days in a row, and re-checks every time the board is opened (not just the first time each day), so a day that finishes being missed later on is still caught.
+
 ### 1.0.2
 
 Bug fixes and visual polish, no new features.
