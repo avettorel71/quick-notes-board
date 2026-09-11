@@ -1,5 +1,7 @@
 # Quick Notes Board
 
+![Quick Notes Board](Screenshot00.jpg)
+
 **Quick Notes Board** is a free, open-source Obsidian plugin for managing small notes fast, practically, and in a genuinely organized way. Instead of scattering quick thoughts across separate files, you get a dedicated board where notes live as draggable cards, sorted into **categories and groups** you define yourself — with instant search to put whatever you need right at your fingertips, no digging required.
 
 It goes well beyond simple sticky notes: built-in **alarms and reminders** (including recurring ones and multiple times a day), **password-protected encrypted notes** for anything sensitive, and cross-cutting **labels** for finding and managing notes by what they have in common, regardless of which category they live in. Everything — every note, every setting — is saved in a **single file**, with optional **data compression** to keep it remarkably small on disk.
@@ -358,6 +360,7 @@ Bug fixes and a new feature for multi-time daily reminders.
 - Fixed cursor placement when clicking inside a note's rendered text to switch to edit mode: on notes with several lines, the cursor could land on the wrong line entirely, because line/paragraph breaks in the rendered text weren't being counted. It now lands on the correct line; minor precision may still be off by a few characters on lines that contain markdown formatting (bold, links, etc.).
 - New: a dedicated "Missed reminders" window. If one or more scheduled alarm times passed while Obsidian was closed, this window lists what was missed, shown the next time you open the board (instead of a quick, easy-to-miss popup notification).
 - New: reminders with multiple daily times now automatically advance to the next scheduled day once every time for the current day has passed, instead of going silent forever — shown in the "Missed reminders" window together with what was missed. This also catches up correctly if Obsidian hasn't been opened for several days in a row, and re-checks every time the board is opened (not just the first time each day), so a day that finishes being missed later on is still caught.
+- Added a promotional image at the top of the README (`Screenshot00.jpg`) — no code changes.
 
 ### 1.0.2
 
