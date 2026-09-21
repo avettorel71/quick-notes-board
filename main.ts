@@ -162,6 +162,9 @@ export interface QuickNote {
 	/** Se true, l'allarme (notifica, suono, bordo lampeggiante) non scatta mai di sabato
 	 * o domenica, qualunque sia la ripetizione impostata. */
 	skipWeekends?: boolean;
+	/** Quante volte l'allarme è effettivamente scattato (notifica + suono). Assente = 0.
+	 * Si azzera solo rimuovendo l'allarme dalla nota. */
+	reminderFireCount?: number;
 	/** Id delle etichette assegnate a questa nota (elenco piatto, definito in
 	 * Impostazioni). Una nota può averne quante ne vuole insieme. */
 	labelIds?: string[];
@@ -279,6 +282,14 @@ interface QnbPluginDataFile {
 export default class QuickNotesBoardPlugin extends Plugin {
 	notes: QuickNote[] = [];
 	settings: QuickNotesBoardSettings = DEFAULT_SETTINGS;
+	/** Registro attività: data locale "YYYY-MM-DD" → id delle note il cui testo è stato
+	 * modificato quel giorno (una nota conta una sola volta per giorno). Indipendente dalle
+	 * note: cestinare o archiviare una nota non cancella l'attività passata. Salvato in
+	 * data.json (chiave "activityLog"), non nel file delle note. */
+	activityLog: Record<string, string[]> = {};
+	/** Finché il registro non è stato letto da disco non va mai scritto: si rischierebbe di
+	 * sovrascrivere quello salvato con uno vuoto. */
+	private activityLogLoaded = false;
 	/** Ultimo avviso di scadenza inviato per nota (solo in memoria: non sopravvive alla
 	 * chiusura di Obsidian, come concordato). */
 	private dueReminderLastFired = new Map<string, number>();
@@ -303,6 +314,7 @@ export default class QuickNotesBoardPlugin extends Plugin {
 		// eventuali testi di default usati durante il parsing sono nella lingua giusta.
 		await this.loadSettings();
 		await this.loadNotes();
+		await this.loadActivityLog();
 
 		this.registerView(
 			VIEW_TYPE_QNB,
@@ -394,7 +406,65 @@ export default class QuickNotesBoardPlugin extends Plugin {
 	async saveSettings() {
 		const data = ((await this.loadData()) as QnbPluginDataFile | null) || {};
 		data.settings = this.settings as unknown as Record<string, unknown>;
+		if (this.activityLogLoaded) data.activityLog = this.activityLog;
 		await this.saveData(data);
+	}
+
+	/** Data locale (non UTC) di un timestamp, nel formato "YYYY-MM-DD". */
+	private localDateKey(ts: number): string {
+		const d = new Date(ts);
+		const mm = String(d.getMonth() + 1).padStart(2, "0");
+		const dd = String(d.getDate()).padStart(2, "0");
+		return `${d.getFullYear()}-${mm}-${dd}`;
+	}
+
+	/** Legge il registro attività da data.json. Al primissimo avvio (chiave assente) lo
+	 * inizializza in modo approssimato: per ogni nota già modificata dopo la creazione, la
+	 * sua ultima modifica nota — lo storico precedente non è ricostruibile. */
+	private async loadActivityLog() {
+		const data = ((await this.loadData()) as QnbPluginDataFile | null) || {};
+		const stored = data.activityLog;
+		if (stored && typeof stored === "object") {
+			const log: Record<string, string[]> = {};
+			for (const [day, ids] of Object.entries(stored as Record<string, unknown>)) {
+				if (Array.isArray(ids)) log[day] = ids.filter((id): id is string => typeof id === "string");
+			}
+			this.activityLog = log;
+			this.activityLogLoaded = true;
+			return;
+		}
+
+		const seeded: Record<string, string[]> = {};
+		for (const note of this.notes) {
+			if (note.deleted || !note.modifiedAt) continue;
+			if (note.modifiedAt - note.createdAt < 1000) continue; // mai modificata dopo la creazione
+			const key = this.localDateKey(note.modifiedAt);
+			if (!seeded[key]) seeded[key] = [];
+			seeded[key].push(note.id);
+		}
+		this.activityLog = seeded;
+		this.activityLogLoaded = true;
+		await this.saveActivityLog();
+	}
+
+	private async saveActivityLog() {
+		if (!this.activityLogLoaded) return;
+		const data = ((await this.loadData()) as QnbPluginDataFile | null) || {};
+		// Scrive sempre insieme impostazioni e registro dalla memoria: due salvataggi
+		// ravvicinati non possono così farsi perdere a vicenda nulla.
+		data.settings = this.settings as unknown as Record<string, unknown>;
+		data.activityLog = this.activityLog;
+		await this.saveData(data);
+	}
+
+	/** Registra che oggi il testo di questa nota è stato modificato (una sola volta per
+	 * nota e per giorno, qualunque sia il numero di salvataggi). */
+	recordNoteModified(noteId: string) {
+		const key = this.localDateKey(Date.now());
+		const ids = this.activityLog[key] ?? (this.activityLog[key] = []);
+		if (ids.includes(noteId)) return;
+		ids.push(noteId);
+		void this.saveActivityLog();
 	}
 
 	refreshOpenViews() {
@@ -606,6 +676,12 @@ export default class QuickNotesBoardPlugin extends Plugin {
 	async setActivityChartWindowSize(width: number, height: number) {
 		this.settings.activityChartWindowWidth = Math.min(3000, Math.max(480, Math.round(width)));
 		this.settings.activityChartWindowHeight = Math.min(2000, Math.max(400, Math.round(height)));
+		await this.saveSettings();
+	}
+
+	/** Ricorda se i grafici "Andamento della board" nascondono i giorni senza attività. */
+	async setActivityChartHideEmptyDays(hide: boolean) {
+		this.settings.activityChartHideEmptyDays = hide;
 		await this.saveSettings();
 	}
 
@@ -997,6 +1073,10 @@ export default class QuickNotesBoardPlugin extends Plugin {
 
 			// Notifica persistente (non sparisce da sola) + suono in loop: entrambi si
 			// fermano solo cliccando la notifica stessa o l'icona allarme della nota.
+			// Conta l'esecuzione: l'allarme sta effettivamente scattando ora.
+			note.reminderFireCount = (note.reminderFireCount || 0) + 1;
+			void this.saveNotes();
+
 			const notice = new Notice(this.tr("notice.dueReminder", { title: note.title }), 0);
 			notice.messageEl.addEventListener("click", () => this.stopDueAlarm(note.id));
 			this.playDueAlarmLoop(note.id);
@@ -1355,6 +1435,7 @@ export default class QuickNotesBoardPlugin extends Plugin {
 				const remRepeatStr = attrs.get("remrepeat");
 				const remRepeatEveryStr = attrs.get("remrepeatevery");
 				const remSkipWeekendsStr = attrs.get("remskipwe");
+				const remCountStr = attrs.get("remcount");
 				const labelsStr = attrs.get("labels");
 				i++;
 
@@ -1419,6 +1500,7 @@ export default class QuickNotesBoardPlugin extends Plugin {
 							: undefined,
 					reminderRepeatEvery: remRepeatEveryStr ? parseInt(remRepeatEveryStr, 10) || undefined : undefined,
 					skipWeekends: remSkipWeekendsStr === "1" ? true : undefined,
+					reminderFireCount: remCountStr ? parseInt(remCountStr, 10) || undefined : undefined,
 					labelIds: labelsStr ? labelsStr.split(",").filter((id) => id) : undefined,
 				});
 				continue;
@@ -1500,6 +1582,7 @@ export default class QuickNotesBoardPlugin extends Plugin {
 						if (note.reminderRepeatEvery) optionalAttrs.push(`remrepeatevery=${note.reminderRepeatEvery}`);
 					}
 					if (note.skipWeekends) optionalAttrs.push("remskipwe=1");
+					if (note.reminderFireCount) optionalAttrs.push(`remcount=${note.reminderFireCount}`);
 				}
 				if (note.labelIds && note.labelIds.length > 0) {
 					optionalAttrs.push(`labels=${note.labelIds.join(",")}`);

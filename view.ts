@@ -2105,6 +2105,7 @@ export class QuickNotesBoardView extends ItemView {
 					evt.stopPropagation(); // non deve aprire la modalità modifica
 					note.content = toggleTaskLine(note.content, lineIndex);
 					note.modifiedAt = Date.now();
+					this.plugin.recordNoteModified(note.id);
 					await this.plugin.saveNotes();
 					// Ridisegna leggendo il testo aggiornato: è Obsidian stesso, durante il
 					// render, ad applicare la barratura e lo stile "spuntato" corretti — il
@@ -2153,6 +2154,7 @@ export class QuickNotesBoardView extends ItemView {
 					const target = match[1];
 					note.content = replaceEmbedAtIndex(note.content, domIndex, `![[${target}|${finalWidth}]]`);
 					note.modifiedAt = Date.now();
+					this.plugin.recordNoteModified(note.id);
 					void this.plugin.saveNotes();
 				};
 
@@ -2308,6 +2310,7 @@ export class QuickNotesBoardView extends ItemView {
 			if (newContent !== note.content) {
 				note.content = newContent;
 				note.modifiedAt = Date.now();
+				this.plugin.recordNoteModified(note.id);
 				await this.plugin.saveNotes();
 			}
 			this.renderNoteBodyPreview(bodyEl, note, noteEl, toggleBtn);

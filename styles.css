@@ -1330,6 +1330,40 @@ button.qnb-group-menu-btn {
 	border-bottom: 2px solid var(--text-faint);
 }
 
+/* Riga inferiore: toggle a sinistra, pulsante "Chiudi" a destra. */
+.qnb-activity-footer {
+	flex-shrink: 0;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 0.75em 0 0;
+	margin-top: 8px;
+	border-top: 1px solid var(--background-modifier-border);
+}
+
+.qnb-activity-toggles {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 8px 24px;
+}
+
+.qnb-activity-hide-empty {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+}
+
+.qnb-activity-empty {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	height: 100%;
+	color: var(--text-muted);
+	font-style: italic;
+}
+
 .qnb-activity-axis-label {
 	font-size: 13px;
 	fill: var(--text-muted);

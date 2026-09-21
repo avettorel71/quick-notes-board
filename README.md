@@ -213,6 +213,10 @@ Labels are a **flat, cross-cutting** tagging system, independent from categories
 
 The toolbar's "Activity" button opens a resizable window with two bar charts, browsable month by month: **notes created per day** and **characters written per day**, plus the running totals for the selected month. It's a quick way to see, at a glance, how many notes and how many characters you've actually created and typed in the current month — a simple but effective way to track your writing/working pace over time, spot your most productive days, or just confirm you're keeping up a steady habit. Hovering over a bar shows the exact value for that day; the colors of both charts are customizable from settings.
 
+At the bottom-left of the window, the **"Hide days with no activity"** toggle removes every day with no notes created and no characters written from both charts, so they show only the days you actually worked (bars are capped to a sensible width when few days remain, and a message is shown if the month has no activity at all). The totals are unaffected, and the toggle's state is remembered.
+
+Next to it, the **"Show modified notes"** toggle swaps the first chart for **notes modified per day**, on the same calendar (the characters chart stays as is, and the monthly total changes accordingly). Modifications come from a dedicated daily activity log — not from each note's last-modified date, which would only remember the latest edit — so a note edited on several different days appears on every one of them. Each note counts once per day, however many times it's saved; saving changed text, ticking a checklist item, and resizing an embedded image count, while locking, moving, or recategorizing a note doesn't. History from before this version can't be reconstructed: the log starts from each existing note's last known modification, and is accurate from then on. The log lives in the plugin's `data.json` (not in the notes file), and keeps past activity even if a note is later trashed.
+
 ---
 
 ## Alarms and reminders
@@ -230,7 +234,9 @@ Set from the alarm clock icon on a note. The panel lets you configure:
 
 **How it behaves**: once the alarm window opens, the note gets a blinking colored border (customizable in settings) and a looping sound alarm starts, together with a persistent notification — it keeps ringing until you stop it, by clicking the notification or the note's alarm icon. With a single daily time, stopping it means it will ring again after the configured interval if you don't fully resolve it. With **multiple times in the same day**, stopping it resolves every time slot due so far at once, and it then stays silent until the *next* scheduled time arrives — it never resumes nagging in between. Border and sound are always checked on the same 5-second cadence, so they never fall out of sync with each other.
 
-**Alarm list**: the toolbar's "Alarms" button shows every note with an alarm set, grouped by category/group/subgroup, with its due date, time(s), and a live "time remaining" countdown (days/hours/minutes, or "Overdue"). Clicking a row opens that note's alarm panel directly.
+**Repetitions counter**: every time an alarm actually fires (notification and sound start), the note's counter goes up by one — including re-rings after the configured interval, and each individual time of a multi-time day. Alarms missed while Obsidian was closed are not counted, since they never rang. The counter is kept when you postpone to the next alarm or edit the alarm, and is reset only when you remove the alarm from the note.
+
+**Alarm list**: the toolbar's "Alarms" button shows every note with an alarm set, grouped by category/group/subgroup, with its due date, time(s), a live "time remaining" countdown (days/hours/minutes, or "Overdue"), and a **Repetitions** column showing how many times that alarm has actually rung so far. Clicking a row opens that note's alarm panel directly.
 
 ---
 
@@ -349,6 +355,14 @@ If [data compression](#data-file-compression) is enabled, the file instead start
 ---
 
 ## Version history
+
+### 1.0.4
+
+New features for the Alarms list and the Board Activity charts.
+
+- New: the Alarms list has a new **Repetitions** column, right after "Time left", showing how many times each alarm has rung. The counter increases every time the alarm fires (notification and sound), is saved together with the note in the data file, survives restarts, and is reset only when the alarm is removed from the note. Existing alarms start from 0.
+- New: the Board Activity window has a **"Hide days with no activity"** toggle (bottom-left, opposite the Close button). When on, both charts show only the days where something was actually done; the choice is remembered between openings.
+- New: the Board Activity window has a **"Show modified notes"** toggle that replaces the "notes created per day" chart with **notes modified per day**, based on a new persistent daily activity log (so edits to already-existing notes are finally counted, each note once per day).
 
 ### 1.0.3
 

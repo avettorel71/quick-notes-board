@@ -295,6 +295,8 @@ export interface QuickNotesBoardSettings {
 	 * ridimensionamento manuale dell'utente. */
 	activityChartWindowWidth: number;
 	activityChartWindowHeight: number;
+	/** Se true, nei grafici "Andamento della board" i giorni senza alcuna attività sono nascosti. */
+	activityChartHideEmptyDays: boolean;
 	boardStructureWindowWidth: number;
 	boardStructureWindowHeight: number;
 	/** Cartella del vault dove creare i file quando si trasforma una quick note in nota vera; vuota = radice del vault. */
@@ -343,6 +345,7 @@ export const DEFAULT_SETTINGS: QuickNotesBoardSettings = {
 	activityChartCharsColor: "",
 	activityChartWindowWidth: 1200,
 	activityChartWindowHeight: 640,
+	activityChartHideEmptyDays: false,
 	boardStructureWindowWidth: 1000,
 	boardStructureWindowHeight: 600,
 	convertedNotesFolder: "",

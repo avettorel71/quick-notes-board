@@ -1,4 +1,4 @@
-import { App, Modal, Setting, ButtonComponent, setIcon, Notice } from "obsidian";
+import { App, Modal, Setting, ButtonComponent, ToggleComponent, setIcon, Notice } from "obsidian";
 import type { QnbCategory, QnbGroup } from "./settings";
 import type QuickNotesBoardPlugin from "./main";
 import type { QuickNote, QnbFontFamily } from "./main";
@@ -1034,6 +1034,11 @@ export class BoardActivityModal extends Modal {
 	private lang: QnbLang;
 	private year: number;
 	private month: number; // 0-11
+	/** Se true, i giorni senza note né caratteri vengono tolti da entrambi i grafici. */
+	private hideEmptyDays: boolean;
+	/** Se true, il primo grafico mostra le note modificate per giorno invece di quelle create.
+	 * Vale solo per la finestra aperta: a ogni apertura si riparte dalle note create. */
+	private showModified = false;
 
 	private notesPerDay: { day: number; value: number }[] = [];
 	private charsPerDay: { day: number; value: number }[] = [];
@@ -1048,6 +1053,7 @@ export class BoardActivityModal extends Modal {
 		const now = new Date();
 		this.year = now.getFullYear();
 		this.month = now.getMonth();
+		this.hideEmptyDays = plugin.settings.activityChartHideEmptyDays;
 	}
 
 	private tr(key: string, vars?: Record<string, string>): string {
@@ -1179,6 +1185,20 @@ export class BoardActivityModal extends Modal {
 			totalChars += chars;
 		}
 
+		// Modalità "note modificate": il primo grafico (e il suo totale) leggono il registro
+		// attività invece delle date di creazione. Il grafico dei caratteri non cambia.
+		if (this.showModified) {
+			this.notesPerDay = [];
+			totalNotes = 0;
+			const mm = String(this.month + 1).padStart(2, "0");
+			for (let day = 1; day <= daysInMonth; day++) {
+				const ids = this.plugin.activityLog[`${this.year}-${mm}-${String(day).padStart(2, "0")}`];
+				const value = ids ? ids.length : 0;
+				this.notesPerDay.push({ day, value });
+				totalNotes += value;
+			}
+		}
+
 		// Contenitore dei due grafici: si spartisce tutto lo spazio verticale rimasto
 		// (titolo, navigazione, riepilogo e pulsante hanno un'altezza fissa) e lo divide
 		// a metà tra i due grafici, sempre insieme e in proporzione, via flexbox — non a
@@ -1186,7 +1206,7 @@ export class BoardActivityModal extends Modal {
 		const chartsContainer = contentEl.createDiv({ cls: "qnb-activity-charts" });
 		this.notesChartWrapper = this.createChartSection(
 			chartsContainer,
-			this.tr("modal.boardActivity.notesChart")
+			this.tr(this.showModified ? "modal.boardActivity.modifiedChart" : "modal.boardActivity.notesChart")
 		);
 		this.charsChartWrapper = this.createChartSection(
 			chartsContainer,
@@ -1203,16 +1223,36 @@ export class BoardActivityModal extends Modal {
 		const summary = contentEl.createDiv({ cls: "qnb-cat-stats-summary" });
 		summary.createDiv({
 			cls: "qnb-cat-stats-summary-row",
-			text: this.tr("modal.boardActivity.totalNotes", { count: String(totalNotes) }),
+			text: this.tr(this.showModified ? "modal.boardActivity.totalModified" : "modal.boardActivity.totalNotes", {
+				count: String(totalNotes),
+			}),
 		});
 		summary.createDiv({
 			cls: "qnb-cat-stats-summary-row",
 			text: this.tr("modal.boardActivity.totalChars", { count: String(totalChars) }),
 		});
 
-		new Setting(contentEl).addButton((btn) =>
-			btn.setButtonText(this.tr("trash.close")).onClick(() => this.close())
-		);
+		// Riga inferiore: toggle a sinistra, "Chiudi" a destra.
+		const footer = contentEl.createDiv({ cls: "qnb-activity-footer" });
+		const toggles = footer.createDiv({ cls: "qnb-activity-toggles" });
+
+		const modifiedWrap = toggles.createDiv({ cls: "qnb-activity-hide-empty" });
+		new ToggleComponent(modifiedWrap).setValue(this.showModified).onChange((value) => {
+			this.showModified = value;
+			this.render();
+		});
+		modifiedWrap.createSpan({ text: this.tr("modal.boardActivity.showModified") });
+
+		const toggleWrap = toggles.createDiv({ cls: "qnb-activity-hide-empty" });
+		new ToggleComponent(toggleWrap).setValue(this.hideEmptyDays).onChange((value) => {
+			this.hideEmptyDays = value;
+			void this.plugin.setActivityChartHideEmptyDays(value);
+			this.redrawCharts();
+		});
+		toggleWrap.createSpan({ text: this.tr("modal.boardActivity.hideEmptyDays") });
+		new ButtonComponent(footer)
+			.setButtonText(this.tr("trash.close"))
+			.onClick(() => this.close());
 	}
 
 	/** Crea il titolo e il contenitore (osservato per il ridimensionamento) di un grafico,
@@ -1226,17 +1266,28 @@ export class BoardActivityModal extends Modal {
 	/** Ridisegna entrambi i grafici usando la dimensione attuale (misurata) dei loro
 	 * contenitori — richiamato all'apertura, al cambio mese, e a ogni ridimensionamento. */
 	private redrawCharts() {
+		// Con il toggle attivo, un giorno resta solo se ha almeno una nota o un carattere.
+		// Il filtro è unico per entrambi i grafici, così mostrano sempre gli stessi giorni.
+		const keepDay = (day: number): boolean => {
+			if (!this.hideEmptyDays) return true;
+			const notes = this.notesPerDay.find((d) => d.day === day)?.value ?? 0;
+			const chars = this.charsPerDay.find((d) => d.day === day)?.value ?? 0;
+			return notes > 0 || chars > 0;
+		};
+		const notesData = this.notesPerDay.filter((d) => keepDay(d.day));
+		const charsData = this.charsPerDay.filter((d) => keepDay(d.day));
+
 		if (this.notesChartWrapper) {
 			this.drawBarChart(
 				this.notesChartWrapper,
-				this.notesPerDay,
+				notesData,
 				this.plugin.settings.activityChartNotesColor || "var(--interactive-accent)"
 			);
 		}
 		if (this.charsChartWrapper) {
 			this.drawBarChart(
 				this.charsChartWrapper,
-				this.charsPerDay,
+				charsData,
 				this.plugin.settings.activityChartCharsColor || "var(--color-green, #4caf50)"
 			);
 		}
@@ -1252,11 +1303,20 @@ export class BoardActivityModal extends Modal {
 
 		wrapper.empty();
 
+		// Nessun giorno da mostrare (es. toggle attivo su un mese senza attività).
+		if (data.length === 0) {
+			wrapper.createDiv({ cls: "qnb-activity-empty", text: this.tr("modal.boardActivity.noActivity") });
+			return;
+		}
+
 		const topMargin = 22;
 		const bottomMargin = 26;
 		const maxValue = Math.max(1, ...data.map((d) => d.value));
 		const barGap = 3;
-		const barWidth = data.length > 0 ? width / data.length - barGap : 0;
+		// Con pochi giorni le barre non devono diventare enormi: larghezza massima, barra
+		// centrata nel suo spazio. Con molti giorni (mese intero) il limite non interviene.
+		const slotWidth = width / data.length;
+		const barWidth = Math.min(slotWidth - barGap, 64);
 
 		const svg = wrapper.createSvg("svg", {
 			attr: { viewBox: `0 0 ${width} ${height}`, preserveAspectRatio: "none" },
@@ -1267,7 +1327,7 @@ export class BoardActivityModal extends Modal {
 
 		data.forEach((d, idx) => {
 			const barHeight = (d.value / maxValue) * (height - bottomMargin - topMargin);
-			const x = idx * (barWidth + barGap);
+			const x = idx * slotWidth + (slotWidth - barGap - barWidth) / 2;
 			const y = height - bottomMargin - barHeight;
 
 			const rect = svg.createSvg("rect", {
@@ -1647,6 +1707,7 @@ export class DueDateModal extends Modal {
 					this.note.reminderRepeat = undefined;
 					this.note.reminderRepeatEvery = undefined;
 					this.note.skipWeekends = undefined;
+					this.note.reminderFireCount = undefined;
 					this.plugin.stopDueAlarm(this.note.id);
 					await this.plugin.saveNotes();
 					this.onSaved();
@@ -1715,6 +1776,7 @@ export class AlarmListModal extends Modal {
 		headerRow.createDiv({ text: this.tr("modal.alarmList.colDate") });
 		headerRow.createDiv({ text: this.tr("modal.alarmList.colTime") });
 		headerRow.createDiv({ text: this.tr("modal.alarmList.colRemaining") });
+		headerRow.createDiv({ text: this.tr("modal.alarmList.colRepetitions") });
 
 		for (const note of notes) {
 			const row = grid.createDiv({ cls: "qnb-alarm-grid-row qnb-alarm-grid-item" });
@@ -1755,6 +1817,7 @@ export class AlarmListModal extends Modal {
 			row.createDiv({
 				text: formatTimeRemaining(note.dueDate || "", timeForCountdown, (key, vars) => this.tr(key, vars)),
 			});
+			row.createDiv({ text: String(note.reminderFireCount || 0) });
 		}
 
 		new Setting(contentEl).addButton((btn) =>
