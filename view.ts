@@ -744,14 +744,16 @@ export class QuickNotesBoardView extends ItemView {
 
 		this.plugin.playSound("toolbar-tidy-up");
 
-		// Cinque modalità, una dopo l'altra ad ogni click (poi si ricomincia dalla prima).
+		// Sei modalità, una dopo l'altra ad ogni click (poi si ricomincia dalla prima).
 		// La prima è quella "storica": ordina per posizione attuale (alto poi sinistra),
 		// non per grandezza — le altre quattro ordinano per superficie (largh. × alt.),
 		// in orizzontale (per righe) o verticale (per colonne), crescente o decrescente.
+		// La sesta dispone le note a cascata, dalla più vecchia (dietro) alla più recente
+		// (davanti), lasciando visibile solo la barra del titolo di ciascuna.
 		const modes: {
 			labelKey: string;
 			sort: (a: QuickNote, b: QuickNote) => number;
-			direction: "rows" | "columns";
+			direction: "rows" | "columns" | "cascade";
 		}[] = [
 			{ labelKey: "view.tidyUp.mode.current", sort: (a, b) => a.y - b.y || a.x - b.x, direction: "rows" },
 			{
@@ -774,6 +776,11 @@ export class QuickNotesBoardView extends ItemView {
 				sort: (a, b) => b.w * b.h - a.w * a.h,
 				direction: "columns",
 			},
+			{
+				labelKey: "view.tidyUp.mode.cascade",
+				sort: (a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id),
+				direction: "cascade",
+			},
 		];
 
 		const mode = modes[this.tidyModeIndex];
@@ -783,7 +790,56 @@ export class QuickNotesBoardView extends ItemView {
 		const startX = 40;
 		const startY = 40;
 
-		if (mode.direction === "rows") {
+		if (mode.direction === "cascade") {
+			// Cascata: ogni nota scende di un passo pari all'altezza reale della barra del
+			// titolo (misurata sul DOM, così segue font e zoom) e si sposta un po' a destra,
+			// in modo che di ogni nota sottostante resti visibile il solo titolo. Se la
+			// cascata non ci sta in altezza ne parte un'altra a destra della precedente; se
+			// non ci sta nemmeno in larghezza, sotto.
+			let headerH = 0;
+			for (const n of sorted) {
+				const h = this.noteElements.get(n.id)?.querySelector<HTMLElement>(".qnb-note-header")?.offsetHeight ?? 0;
+				headerH = Math.max(headerH, h);
+			}
+			const stepY = (headerH || 40) + 2;
+			const stepX = 24;
+			const viewWidth = Math.max(this.boardEl.clientWidth, startX + 260);
+			// Quante note in una pila: conta solo che le loro BARRE DEL TITOLO stiano
+			// nell'altezza visibile. Il corpo dell'ultima (la più recente, davanti) può
+			// scendere oltre il bordo, come nelle altre modalità (si scorre in verticale):
+			// riservare lo spazio della nota più alta spezzava la pila in tante
+			// mini-cascate appena c'era una nota molto grande.
+			const perCascade = Math.max(
+				2,
+				Math.floor((this.boardEl.clientHeight - 2 * startY - (headerH || 40)) / stepY) + 1
+			);
+
+			let groupX = startX;
+			let bandY = startY;
+			let bandHeight = 0;
+			for (let i = 0; i < sorted.length; i += perCascade) {
+				const group = sorted.slice(i, i + perCascade);
+				const groupW = Math.max(...group.map((n) => n.w)) + (group.length - 1) * stepX;
+				const groupH = (group.length - 1) * stepY + group[group.length - 1].h;
+				if (groupX !== startX && groupX + groupW > viewWidth) {
+					groupX = startX;
+					bandY += bandHeight + gap;
+					bandHeight = 0;
+				}
+				group.forEach((note, idx) => {
+					note.x = groupX + idx * stepX;
+					note.y = bandY + idx * stepY;
+				});
+				groupX += groupW + gap;
+				bandHeight = Math.max(bandHeight, groupH);
+			}
+
+			// La più vecchia resta dietro, la più recente davanti: l'ordine di
+			// sovrapposizione è quello di noteOrder (l'ultima è in primo piano).
+			const cascadeIds = new Set(sorted.map((n) => n.id));
+			this.noteOrder = this.noteOrder.filter((id) => !cascadeIds.has(id));
+			for (const n of sorted) this.noteOrder.push(n.id);
+		} else if (mode.direction === "rows") {
 			// Riempie per righe: va a capo su una nuova riga quando si supera la larghezza
 			// disponibile (comportamento identico a quello di sempre).
 			const maxWidth = Math.max(this.boardEl.clientWidth - startX - gap, 260);
