@@ -1781,7 +1781,7 @@ export class QuickNotesBoardView extends ItemView {
 			if ((evt.target as HTMLElement).closest("a")) return;
 			if ((evt.target as HTMLElement).closest(".qnb-image-resize-handle")) return;
 			if (note.encrypted) return;
-			const clickOffset = this.getClickOffsetInRenderedBody(bodyEl, evt.clientX, evt.clientY);
+			const clickOffset = this.getClickOffsetInRenderedBody(bodyEl, evt.clientX, evt.clientY, note.content);
 			this.enterEditMode(noteEl, bodyEl, note, toggleModeBtn, clickOffset ?? undefined);
 		});
 		bodyEl.addEventListener("dblclick", (evt) => {
@@ -1790,7 +1790,7 @@ export class QuickNotesBoardView extends ItemView {
 			if ((evt.target as HTMLElement).closest(".qnb-image-resize-handle")) return;
 			if ((evt.target as HTMLElement).closest('input[type="checkbox"]')) return;
 			if (note.encrypted) return;
-			const clickOffset = this.getClickOffsetInRenderedBody(bodyEl, evt.clientX, evt.clientY);
+			const clickOffset = this.getClickOffsetInRenderedBody(bodyEl, evt.clientX, evt.clientY, note.content);
 			this.enterEditMode(noteEl, bodyEl, note, toggleModeBtn, clickOffset ?? undefined);
 		});
 		noteEl.addEventListener("qnb-force-blur", () => {
@@ -2186,14 +2186,30 @@ export class QuickNotesBoardView extends ItemView {
 		}
 	}
 
-	/** Calcola l'offset di carattere (nel testo così come mostrato a schermo) corrispondente
-	 * al punto cliccato, per posizionare il cursore esattamente lì quando si entra in
-	 * modifica — invece che sempre alla fine del testo. Per note senza formattazione
-	 * (il caso più comune) l'offset combacia esattamente col testo grezzo; con markdown nel
-	 * mezzo (grassetto, link, ecc.) resta una buona approssimazione, non sempre perfetta,
-	 * perché il testo reso a schermo e quello grezzo non coincidono sempre carattere per
-	 * carattere. Ritorna null se il browser non supporta l'API necessaria, o il punto non
-	 * cade su testo: in quel caso resta il comportamento di sempre (cursore a fine testo). */
+	/** Calcola l'offset di carattere nel testo GREZZO (Markdown, quello della textarea)
+	 * corrispondente al punto cliccato nel testo renderizzato, per posizionare il cursore
+	 * esattamente lì quando si entra in modifica — invece che sempre alla fine del testo.
+	 *
+	 * Il punto cliccato viene risolto dal browser su un nodo del testo *renderizzato*, che
+	 * per note con formattazione non coincide col testo grezzo: il rendering non mostra i
+	 * delimitatori Markdown (`**`, `_`, `` ` ``, `#`, `- `, `> `, le caselle `[ ]`) né gli
+	 * "a capo" tra un blocco e l'altro. camminaPerOffsetGrezzo cammina l'albero renderizzato
+	 * ricostruendo, elemento per elemento, quei caratteri assenti dal testo a schermo ma
+	 * presenti nella sorgente, così da restituire un offset preciso nella textarea e non
+	 * solo nel testo mostrato.
+	 *
+	 * La compensazione è volutamente prudente: per titoli, citazioni, voci di elenco/lista
+	 * di cose da fare e formattazione inline (grassetto/corsivo/barrato/evidenziato/codice)
+	 * la lunghezza del delimitatore Markdown è certa e viene aggiunta per intero; per gli
+	 * elenchi numerati oltre il nono elemento, o per un elenco annidato con la sua
+	 * indentazione, si usa una stima per difetto (mai per eccesso), così il risultato è
+	 * sempre uguale o più preciso di quello di prima, mai peggiore. Link e wiki-link non
+	 * vengono compensati (la lunghezza del testo alternativo o dell'alias non è
+	 * ricostruibile con certezza dal solo DOM renderizzato) e i blocchi di codice recintati
+	 * da ``` non vengono compensati per le righe di apertura/chiusura: su questi il
+	 * comportamento resta quello di sempre. Ritorna null se il browser non supporta l'API
+	 * necessaria, o il punto non cade su testo: in quel caso resta il comportamento di
+	 * sempre (cursore a fine testo). */
 	/** Tag che nel testo grezzo corrispondono sempre all'inizio di una nuova riga
 	 * (paragrafo, voce di lista, titolo, citazione, blocco di codice, riga di tabella,
 	 * separatore). Non include contenitori come DIV/UL/OL/TABLE: i loro figli diretti
@@ -2203,7 +2219,18 @@ export class QuickNotesBoardView extends ItemView {
 		"P", "LI", "H1", "H2", "H3", "H4", "H5", "H6", "BLOCKQUOTE", "PRE", "HR", "TR",
 	]);
 
-	private getClickOffsetInRenderedBody(bodyEl: HTMLElement, clientX: number, clientY: number): number | null {
+	/** Delimitatori di formattazione inline che nel rendering non lasciano alcuna traccia
+	 * come testo (aprono e chiudono la coppia). La lunghezza è certa a prescindere dal
+	 * carattere usato in sorgente: `**` e `__` sono entrambi 2 caratteri, `*` e `_`
+	 * entrambi 1, e così via — quindi non serve sapere quale dei due l'utente ha scritto. */
+	private static readonly INLINE_DELIM_LENGTH: Record<string, number> = {
+		STRONG: 2, B: 2,
+		EM: 1, I: 1,
+		DEL: 2, S: 2,
+		MARK: 2,
+	};
+
+	private getClickOffsetInRenderedBody(bodyEl: HTMLElement, clientX: number, clientY: number, rawContent: string): number | null {
 		// Cast passando per `unknown`, non per un'intersezione con `Document`: così la
 		// proprietà si risolve solo su questo tipo locale, che non porta il tag
 		// `@deprecated` di lib.dom.d.ts per caretRangeFromPoint (usata solo come fallback,
@@ -2232,36 +2259,145 @@ export class QuickNotesBoardView extends ItemView {
 
 		if (!node || !bodyEl.contains(node)) return null;
 
-		// Cammina su testo ED elementi (non solo sul testo): serve per accorgersi di ogni
-		// cambio di blocco e contare l'"a capo" che nel testo grezzo lo precede, ma che nel
-		// testo renderizzato non esiste come carattere (è solo un confine tra elementi
-		// HTML). Senza questo conteggio, l'offset risultava sistematicamente troppo basso
-		// di un carattere per ogni riga precedente al punto cliccato.
-		const walker = document.createTreeWalker(bodyEl, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT);
-		let total = 0;
-		let sawLine = false;
-		let current = walker.nextNode();
-		while (current) {
-			if (current === node) {
-				return total + offsetInNode;
-			}
-			if (current.nodeType === Node.TEXT_NODE) {
-				total += (current.textContent || "").length;
-			} else if (current.nodeType === Node.ELEMENT_NODE) {
-				const tag = (current as HTMLElement).tagName;
-				if (tag === "BR") {
-					total += 1;
-				} else if (QuickNotesBoardView.BLOCK_LINE_TAGS.has(tag)) {
-					// L'a capo precede l'inizio del blocco, non lo segue: non contarlo
-					// prima del primissimo blocco incontrato, altrimenti l'offset
-					// partirebbe da 1 invece che da 0 sulla primissima riga della nota.
-					if (sawLine) total += 1;
-					sawLine = true;
+		const result = this.walkForRawOffset(bodyEl, node, offsetInNode, {
+			sawLine: false,
+			blockquoteDepth: 0,
+			rawContent,
+			rawPos: 0,
+		});
+		return result.found;
+	}
+
+	/** Cammina ricorsivamente il sottoalbero renderizzato aggiungendo, elemento per
+	 * elemento, i caratteri Markdown che nella sorgente precedono/chiudono quell'elemento
+	 * ma nel testo a schermo non compaiono. `raw` è la lunghezza in caratteri "grezzi"
+	 * dell'intero sottoalbero (testo reso + delimitatori ricostruiti); `found`, se non
+	 * null, è l'offset grezzo del nodo/offset cercato, relativo all'inizio di questo
+	 * sottoalbero — così il chiamante lo somma a quanto già accumulato dai fratelli
+	 * precedenti. */
+	private walkForRawOffset(
+		node: Node,
+		targetNode: Node,
+		targetOffsetInNode: number,
+		state: { sawLine: boolean; blockquoteDepth: number; rawContent: string; rawPos: number }
+	): { raw: number; found: number | null } {
+		if (node === targetNode) {
+			return { raw: 0, found: node.nodeType === Node.TEXT_NODE ? targetOffsetInNode : 0 };
+		}
+
+		if (node.nodeType === Node.TEXT_NODE) {
+			return { raw: (node.textContent || "").length, found: null };
+		}
+
+		if (node.nodeType !== Node.ELEMENT_NODE) return { raw: 0, found: null };
+
+		const el = node as HTMLElement;
+		const tag = el.tagName;
+
+		if (tag === "BR") {
+			// Interruzione di riga dentro lo stesso blocco (es. paragrafo con "a capo
+			// singolo"): nella sorgente è comunque un "\n", ed entro una citazione ogni
+			// riga di continuazione ripete il prefisso "> ".
+			const extra = 1 + (state.blockquoteDepth > 0 ? state.blockquoteDepth * 2 : 0);
+			return { raw: extra, found: null };
+		}
+
+		let isBlockquoteEntry = false;
+		if (tag === "BLOCKQUOTE") {
+			state.blockquoteDepth++;
+			isBlockquoteEntry = true;
+		}
+
+		// Il codice recintato da ``` (blocco PRE>CODE multiriga) non va confuso col codice
+		// inline `x`: solo il secondo ha un singolo carattere di apertura/chiusura da
+		// ricostruire, il primo ha una riga di recinzione a parte che qui non si tenta di
+		// ricostruire (si lascia il comportamento di sempre, non peggiore di prima).
+		const isFencedCode = tag === "CODE" && el.parentElement?.tagName === "PRE";
+		const inlineDelim = tag === "CODE" && !isFencedCode ? 1 : QuickNotesBoardView.INLINE_DELIM_LENGTH[tag];
+
+		let prefix = inlineDelim || 0;
+
+		if (QuickNotesBoardView.BLOCK_LINE_TAGS.has(tag)) {
+			// L'a capo precede l'inizio del blocco, non lo segue: non contarlo prima del
+			// primissimo blocco incontrato, altrimenti l'offset partirebbe da 1 invece
+			// che da 0 sulla primissima riga della nota.
+			if (state.sawLine) prefix += 1;
+			state.sawLine = true;
+
+			// Il prefisso "> " si aggiunge qui (alla riga di contenuto vera: paragrafo,
+			// titolo, voce di elenco...), non al tag BLOCKQUOTE stesso, altrimenti per un
+			//'unica riga citata verrebbe contato due volte.
+			if (tag !== "BLOCKQUOTE" && state.blockquoteDepth > 0) prefix += state.blockquoteDepth * 2;
+
+			if (tag === "H1") prefix += 2;
+			else if (tag === "H2") prefix += 3;
+			else if (tag === "H3") prefix += 4;
+			else if (tag === "H4") prefix += 5;
+			else if (tag === "H5") prefix += 6;
+			else if (tag === "H6") prefix += 7;
+			else if (tag === "LI") {
+				// "- "/"* "/"+ " sono sempre 2 caratteri; un elenco numerato ha invece
+				// lunghezza variabile ("1. " = 3, "10. " = 4, ...): 3 è una stima per
+				// difetto (mai per eccesso) valida sempre, esatta fino al nono elemento.
+				// L'eventuale indentazione di un elenco annidato non viene ricostruita.
+				prefix += el.parentElement?.tagName === "OL" ? 3 : 2;
+				// Casella di spunta: "[ ] " o "[x] " sono comunque 4 caratteri, a
+				// prescindere dallo stato. Solo il diretto figlio della voce, per non
+				// confondersi con quella di un'eventuale sotto-lista annidata.
+				if (Array.from(el.children).some((c) => c.tagName === "INPUT" && (c as HTMLInputElement).type === "checkbox")) {
+					prefix += 4;
+				}
+			} else if (tag === "TR" && el.parentElement?.tagName === "TBODY" && el === el.parentElement.firstElementChild) {
+				// La riga di separazione tra intestazione e dati (es. "| :--: | :--- |")
+				// esiste solo nel testo grezzo: Obsidian non la disegna come riga a sé, e
+				// la sua lunghezza è arbitraria (l'utente può allineare i trattini alla
+				// larghezza della colonna, come in questo esempio). Non essendo
+				// ricostruibile a stima, la si legge per intero dal testo grezzo vero:
+				// "state.rawPos + prefix" è, a questo punto del cammino, la posizione nel
+				// testo grezzo appena dopo l'ultima riga d'intestazione della tabella, cioè
+				// l'inizio esatto di quella riga di separazione.
+				if (el.closest("table")?.querySelector("thead")) {
+					const from = state.rawPos + prefix;
+					const rest = state.rawContent.slice(from);
+					const lineEnd = rest.indexOf("\n");
+					prefix += (lineEnd === -1 ? rest.length : lineEnd) + 1;
 				}
 			}
-			current = walker.nextNode();
 		}
-		return null;
+
+		if (tag === "TD" || tag === "TH") {
+			// Ogni cella nel testo grezzo è preceduta da "| " (la primissima della riga)
+			// o da " | " (le successive); a fine riga c'è anche " |" di chiusura, che
+			// però non serve ricostruire perché viene comunque dopo qualsiasi punto
+			// cliccabile all'interno della riga. Presuppone lo spazio singolo standard
+			// attorno alle barre verticali: se la tabella è stata allineata a mano con
+			// spazi extra, la stima resta comunque più vicina alla realtà di prima
+			// (che non compensava affatto le barre).
+			const isFirstCell = el.parentElement?.firstElementChild === el;
+			prefix += isFirstCell ? 2 : 3;
+		}
+
+		state.rawPos += prefix;
+		let raw = prefix;
+		let found: number | null = null;
+		for (const child of Array.from(el.childNodes)) {
+			const beforeChild = state.rawPos;
+			const r = this.walkForRawOffset(child, targetNode, targetOffsetInNode, state);
+			if (r.found !== null) {
+				found = raw + r.found;
+				break;
+			}
+			raw += r.raw;
+			state.rawPos = beforeChild + r.raw;
+		}
+		// Il delimitatore di chiusura ("**", "`", ecc.) va aggiunto solo se il punto
+		// cercato non è dentro questo elemento: se lo è, quel delimitatore viene DOPO il
+		// punto cliccato nella sorgente, e quindi non deve entrare nell'offset.
+		if (found === null && inlineDelim) raw += inlineDelim;
+
+		if (isBlockquoteEntry) state.blockquoteDepth--;
+
+		return { raw, found };
 	}
 
 	/** Scorre la textarea in modo che la riga del cursore sia visibile (circa a metà

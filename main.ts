@@ -685,6 +685,13 @@ export default class QuickNotesBoardPlugin extends Plugin {
 		await this.saveSettings();
 	}
 
+	/** Ricorda se i grafici "Andamento della board" mostrano le note modificate invece di
+	 * quelle create. */
+	async setActivityChartShowModified(show: boolean) {
+		this.settings.activityChartShowModified = show;
+		await this.saveSettings();
+	}
+
 	async setBoardStructureWindowSize(width: number, height: number) {
 		this.settings.boardStructureWindowWidth = Math.min(3000, Math.max(480, Math.round(width)));
 		this.settings.boardStructureWindowHeight = Math.min(2000, Math.max(400, Math.round(height)));

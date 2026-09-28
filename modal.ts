@@ -1038,7 +1038,7 @@ export class BoardActivityModal extends Modal {
 	private hideEmptyDays: boolean;
 	/** Se true, il primo grafico mostra le note modificate per giorno invece di quelle create.
 	 * Vale solo per la finestra aperta: a ogni apertura si riparte dalle note create. */
-	private showModified = false;
+	private showModified: boolean;
 
 	private notesPerDay: { day: number; value: number }[] = [];
 	private charsPerDay: { day: number; value: number }[] = [];
@@ -1054,6 +1054,7 @@ export class BoardActivityModal extends Modal {
 		this.year = now.getFullYear();
 		this.month = now.getMonth();
 		this.hideEmptyDays = plugin.settings.activityChartHideEmptyDays;
+		this.showModified = plugin.settings.activityChartShowModified;
 	}
 
 	private tr(key: string, vars?: Record<string, string>): string {
@@ -1239,6 +1240,7 @@ export class BoardActivityModal extends Modal {
 		const modifiedWrap = toggles.createDiv({ cls: "qnb-activity-hide-empty" });
 		new ToggleComponent(modifiedWrap).setValue(this.showModified).onChange((value) => {
 			this.showModified = value;
+			void this.plugin.setActivityChartShowModified(value);
 			this.render();
 		});
 		modifiedWrap.createSpan({ text: this.tr("modal.boardActivity.showModified") });

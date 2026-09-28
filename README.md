@@ -128,7 +128,7 @@ Each note is a small draggable card with:
 
 **Zooming a single note's text**: hover over a note's body and use **Ctrl + mouse wheel** (or pinch-to-zoom on a Mac trackpad) to grow or shrink just that note's font size, one step at a time, within the same 10–32px range as the appearance panel's slider. Saved automatically after a short pause. Normal scrolling (without Ctrl) is unaffected.
 
-**Positioning the cursor precisely**: clicking (or double-clicking, depending on your settings) into a note's text places the cursor exactly where you clicked — not always at the end — and scrolls the note so that line is visible. Exact for plain text; a close approximation on lines with Markdown formatting.
+**Positioning the cursor precisely**: clicking (or double-clicking, depending on your settings) into a note's text places the cursor exactly where you clicked — not always at the end — and scrolls the note so that line is visible. Exact for plain text, headings, quotes, bullet/task lists, tables and inline formatting (bold, italic, strikethrough, highlight, inline code); a close approximation on deeply nested lists, numbered lists past the ninth item, and hand-padded table columns; links, wiki-links and fenced ```code``` blocks fall back to the previous, less precise behavior.
 
 **Compact icons** *(optional, from settings)*: when enabled, action icons stay hidden until you hover over the note, edit it, or drag it — for a cleaner look with many notes on the board. Can be turned off at any time.
 
@@ -215,7 +215,7 @@ The toolbar's "Activity" button opens a resizable window with two bar charts, br
 
 At the bottom-left of the window, the **"Hide days with no activity"** toggle removes every day with no notes created and no characters written from both charts, so they show only the days you actually worked (bars are capped to a sensible width when few days remain, and a message is shown if the month has no activity at all). The totals are unaffected, and the toggle's state is remembered.
 
-Next to it, the **"Show modified notes"** toggle swaps the first chart for **notes modified per day**, on the same calendar (the characters chart stays as is, and the monthly total changes accordingly). Modifications come from a dedicated daily activity log — not from each note's last-modified date, which would only remember the latest edit — so a note edited on several different days appears on every one of them. Each note counts once per day, however many times it's saved; saving changed text, ticking a checklist item, and resizing an embedded image count, while locking, moving, or recategorizing a note doesn't. History from before this version can't be reconstructed: the log starts from each existing note's last known modification, and is accurate from then on. The log lives in the plugin's `data.json` (not in the notes file), and keeps past activity even if a note is later trashed.
+Next to it, the **"Show modified notes"** toggle swaps the first chart for **notes modified per day**, on the same calendar (the characters chart stays as is, and the monthly total changes accordingly). Like the other toggle, its state is remembered between openings. Modifications come from a dedicated daily activity log — not from each note's last-modified date, which would only remember the latest edit — so a note edited on several different days appears on every one of them. Each note counts once per day, however many times it's saved; saving changed text, ticking a checklist item, and resizing an embedded image count, while locking, moving, or recategorizing a note doesn't. History from before this version can't be reconstructed: the log starts from each existing note's last known modification, and is accurate from then on. The log lives in the plugin's `data.json` (not in the notes file), and keeps past activity even if a note is later trashed.
 
 ---
 
@@ -355,6 +355,11 @@ If [data compression](#data-file-compression) is enabled, the file instead start
 ---
 
 ## Version history
+
+### 1.0.5
+
+- Fix: the Board Activity window's **"Show modified notes"** toggle now remembers its state between openings, the same way **"Hide days with no activity"** already did.
+- Improved: clicking into a note's text to edit it now places the cursor precisely on headings, quotes, bullet/task lists, tables and inline formatting (bold, italic, strikethrough, highlight, inline code), not just on plain text as before. For tables, the header/data separator row (`| :--: | ... |`) — invisible once rendered, and of unpredictable length since its dashes can be padded to any width — is now read back from the actual note text instead of guessed, so rows after the header land exactly. Links, wiki-links, deeply nested/numbered lists and fenced code blocks keep the previous, best-effort behavior — never worse than before, just not yet exact.
 
 ### 1.0.4
 
