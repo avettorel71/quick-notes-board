@@ -356,10 +356,13 @@ If [data compression](#data-file-compression) is enabled, the file instead start
 
 ## Version history
 
+### 1.0.6
+
+- New: **Reorder** has a sixth mode, **cascade**: notes stacked oldest-to-newest with only their title bars showing, like overlapping windows.
+
 ### 1.0.5
 
 - Fix: the Board Activity window's **"Show modified notes"** toggle now remembers its state between openings, the same way **"Hide days with no activity"** already did.
-- New: **Reorder** has a sixth mode, **cascade**: notes stacked oldest-to-newest with only their title bars showing, like overlapping windows.
 - Improved: clicking into a note's text to edit it now places the cursor precisely on headings, quotes, bullet/task lists, tables and inline formatting (bold, italic, strikethrough, highlight, inline code), not just on plain text as before. For tables, the header/data separator row (`| :--: | ... |`) — invisible once rendered, and of unpredictable length since its dashes can be padded to any width — is now read back from the actual note text instead of guessed, so rows after the header land exactly. Links, wiki-links, deeply nested/numbered lists and fenced code blocks keep the previous, best-effort behavior — never worse than before, just not yet exact.
 
 ### 1.0.4
