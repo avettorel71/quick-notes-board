@@ -360,6 +360,10 @@ If [data compression](#data-file-compression) is enabled, the file instead start
 
 ## Version history
 
+### 1.0.8
+
+- Fixed: three code-quality warnings flagged by Obsidian's automated review (unsafe type handling and a couple of unhandled async calls) — no behavior change for users.
+
 ### 1.0.7
 
 - New: **Archive** and **Trash** buttons in the note's info panel (right-click the title), next to Duplicate note — always act on that specific note, even with other notes selected elsewhere. Meant to make the note header's own Archive/Trash icons safe to hide for a cleaner title bar: with these here, both actions stay one right-click away either way.

@@ -994,7 +994,7 @@ export class QuickNotesBoardView extends ItemView {
 	 * corso né il contatore delle volte suonate: sono storia dell'istanza originale, non
 	 * qualcosa che ha senso clonare in una copia appena creata. */
 	private async duplicateNote(source: QuickNote) {
-		const copy: QuickNote = JSON.parse(JSON.stringify(source));
+		const copy = JSON.parse(JSON.stringify(source)) as QuickNote;
 		copy.id = cryptoRandomId();
 		copy.x = source.x + 24;
 		copy.y = source.y + 24;
@@ -1979,10 +1979,10 @@ export class QuickNotesBoardView extends ItemView {
 				this.plugin,
 				note,
 				groupPath,
-				() => this.duplicateNote(note),
+				() => void this.duplicateNote(note),
 				// ===== CESTINA/ARCHIVIA DAL PANNELLO INFORMATIVO (inizio) =====
-				() => this.archiveNoteFromInfoPanel(note),
-				() => this.trashNoteFromInfoPanel(note)
+				() => void this.archiveNoteFromInfoPanel(note),
+				() => void this.trashNoteFromInfoPanel(note)
 				// ===== CESTINA/ARCHIVIA DAL PANNELLO INFORMATIVO (fine) =====
 			).open();
 		});

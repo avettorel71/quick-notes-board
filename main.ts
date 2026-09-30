@@ -1253,7 +1253,7 @@ export default class QuickNotesBoardPlugin extends Plugin {
 		const dialog = new AlarmRingModal(this.app, this, note, {
 			onSnooze: (minutes) => void this.snoozeAlarm(note.id, minutes),
 			onStop: () => this.stopDueAlarm(note.id),
-			onPostponeToNext: () => this.postponeAlarmToNextSchedule(note.id),
+			onPostponeToNext: () => void this.postponeAlarmToNextSchedule(note.id),
 		});
 		this.activeDueDialogs.set(note.id, dialog);
 		dialog.open();
