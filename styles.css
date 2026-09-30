@@ -596,7 +596,27 @@ button.qnb-group-menu-btn {
 	flex-direction: column;
 	overflow: hidden;
 	z-index: 1;
+	/* ===== ALLEGGERIMENTO NOTE FUORI SCHERMO (inizio) — per togliere la funzione,
+	   cercare questo stesso marcatore in tutti i file e rimuovere quanto racchiude.
+	   Una nota scrollata fuori dall'area visibile della board smette di essere disegnata
+	   e animata finché non ci si torna sopra scorrendo: il browser non ha bisogno di
+	   sapere la sua dimensione dal contenuto, perché è già fissa qui sopra (width/height),
+	   quindi non serve indicargliela a parte (contain-intrinsic-size). Non riguarda le
+	   note nascoste/chiuse (categoria disattivata, o "Chiudi" sulla singola nota): quelle
+	   non vengono proprio create nella pagina, e non hanno mai avuto alcun costo. */
+	content-visibility: auto;
+	/* ===== ALLEGGERIMENTO NOTE FUORI SCHERMO (fine) ===== */
 }
+
+/* ===== ALLEGGERIMENTO NOTE FUORI SCHERMO (inizio) — la modalità "cascata" di Riordina
+   misura l'altezza reale della barra del titolo di ogni nota per calcolare la disposizione,
+   comprese le note al momento fuori dallo scroll: senza questa eccezione, per quelle la
+   misura tornerebbe sbagliata (il browser ne salta il disegno). Applicata solo per la
+   durata di quella misura, poi tolta subito: non annulla l'alleggerimento nell'uso normale. */
+.qnb-board.qnb-measuring-headers .qnb-note {
+	content-visibility: visible;
+}
+/* ===== ALLEGGERIMENTO NOTE FUORI SCHERMO (fine) ===== */
 
 .qnb-note.is-dragging {
 	box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
@@ -751,7 +771,16 @@ button.qnb-group-menu-btn {
 .qnb-icons-collapsed .qnb-note-actions {
 	opacity: 0;
 	pointer-events: none;
-	transition: opacity 0.12s ease-out;
+	/* Oltre a diventare invisibili, la riga si stringe a 0: da ferme occupavano comunque
+	   il loro spazio nell'header, e il titolo — che qui accanto usa flex:1 — restava
+	   compresso in quello che avanzava, anche se visivamente non c'era più nulla a
+	   occuparlo. Il max-width (anziché width) anima comunque in modo fluido pur restando
+	   pari alla larghezza naturale del contenuto quando è espanso: 340px basta per le 13
+	   icone azione possibili anche tutte attive insieme, senza mai allargare la riga oltre
+	   quanto le icone stesse richiedono. */
+	max-width: 0;
+	overflow: hidden;
+	transition: opacity 0.12s ease-out, max-width 0.12s ease-out;
 }
 
 .qnb-icons-collapsed .qnb-note:hover .qnb-note-actions,
@@ -760,6 +789,7 @@ button.qnb-group-menu-btn {
 .qnb-icons-collapsed .qnb-note.is-dragging .qnb-note-actions {
 	opacity: 1;
 	pointer-events: auto;
+	max-width: 340px;
 }
 
 .qnb-note-action-btn {
@@ -1115,6 +1145,25 @@ button.qnb-group-menu-btn {
 	gap: 16px;
 	padding: 8px 0;
 	border-bottom: 1px solid var(--background-modifier-border);
+}
+
+/* L'ultima riga non ha bisogno di una riga sotto: il pulsante "Chiudi" più sotto ha già
+   un proprio bordo superiore (di serie in Obsidian), e i due ravvicinati sembravano una
+   sola riga doppia e sbagliata. */
+.qnb-note-info-row:last-child {
+	border-bottom: none;
+}
+
+/* Riga finale del pannello informativo: "Duplica nota" a sinistra, "Chiudi" a destra —
+   stesso schema della riga dei toggle in "Andamento della board". */
+.qnb-note-info-footer {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	padding-top: 0.75em;
+	margin-top: 8px;
+	border-top: 1px solid var(--background-modifier-border);
 }
 
 .qnb-note-info-label {
@@ -1793,3 +1842,98 @@ button.qnb-group-menu-btn {
 	color: var(--text-accent);
 	font-size: 0.9em;
 }
+
+/* Finestra di dialogo dell'allarme in corso: il nome della nota in evidenza sopra i controlli. */
+.qnb-alarm-dialog-note {
+	margin: 0 0 12px;
+	font-size: 1.1em;
+	font-weight: 600;
+	overflow-wrap: anywhere;
+}
+
+/* Categorie (Impostazioni): controlli della sfumatura e anteprima della barra del titolo. */
+.qnb-gradient-controls {
+	margin-bottom: 8px;
+}
+
+.qnb-category-preview {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	height: 34px;
+	padding: 6px 10px;
+	margin: 8px 0 4px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 6px;
+	font-weight: 600;
+	font-size: 0.9em;
+}
+
+.qnb-category-preview-icon {
+	display: flex;
+	flex-shrink: 0;
+}
+
+.qnb-category-preview-title {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* ===== ANIMAZIONE SFUMATURA (inizio) — per togliere la funzione, cercare questo stesso
+   marcatore in tutti i file e rimuovere quanto racchiude. =====
+   Un solo trucco CSS funziona per tutti e sei gli orientamenti: si allarga il "tessuto"
+   della sfumatura al triplo in entrambe le direzioni (background-size) e se ne anima la
+   posizione da un angolo all'altro. Per una sfumatura orizzontale la componente verticale
+   dell'animazione non produce alcun effetto visibile (il colore non cambia mai in verticale)
+   e viceversa per una verticale; per le due diagonali contribuiscono entrambe. Nessun
+   timer JavaScript: il browser gestisce tutto da solo, si ferma da sé quando la nota non è
+   visibile, e rispetta l'impostazione di sistema "riduci le animazioni" (sotto). */
+@keyframes qnb-gradient-shift {
+	from {
+		background-position: 0% 0%;
+	}
+	to {
+		background-position: 100% 100%;
+	}
+}
+
+.qnb-note-header-colored.qnb-gradient-animated,
+.qnb-category-preview.qnb-gradient-animated {
+	background-size: 300% 300%;
+	animation: qnb-gradient-shift var(--qnb-gradient-anim-seconds, 3s) ease-in-out infinite alternate;
+}
+
+/* Variante "solo al passaggio del mouse o in modifica": il tessuto resta allargato anche
+   da ferma (nessuno scatto quando l'animazione parte), ma l'animazione vera e propria
+   scatta solo negli stessi stati già usati per le icone compatte (nota) oppure al passaggio
+   del mouse sull'anteprima stessa (nel pannello Impostazioni, dove non c'è un ".qnb-note"
+   che la racchiude). */
+.qnb-note-header-colored.qnb-gradient-animate-hover,
+.qnb-category-preview.qnb-gradient-animate-hover {
+	background-size: 300% 300%;
+}
+
+.qnb-note:hover .qnb-note-header-colored.qnb-gradient-animate-hover,
+.qnb-note:focus-within .qnb-note-header-colored.qnb-gradient-animate-hover,
+.qnb-note.is-editing .qnb-note-header-colored.qnb-gradient-animate-hover,
+.qnb-note.is-dragging .qnb-note-header-colored.qnb-gradient-animate-hover,
+.qnb-category-preview.qnb-gradient-animate-hover:hover {
+	animation: qnb-gradient-shift var(--qnb-gradient-anim-seconds, 3s) ease-in-out infinite alternate;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.qnb-note-header-colored.qnb-gradient-animated,
+	.qnb-category-preview.qnb-gradient-animated,
+	.qnb-note-header-colored.qnb-gradient-animate-hover,
+	.qnb-category-preview.qnb-gradient-animate-hover {
+		animation: none;
+		background-size: auto;
+	}
+}
+
+/* Impostazioni: riga toggle + durata, sotto il colore finale della sfumatura. */
+.qnb-gradient-animation-row {
+	margin-left: 12px;
+}
+/* ===== ANIMAZIONE SFUMATURA (fine) ===== */

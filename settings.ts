@@ -1,6 +1,12 @@
 import { App, PluginSettingTab, Setting, Notice, ButtonComponent, ColorComponent, TextComponent, setIcon } from "obsidian";
 import type QuickNotesBoardPlugin from "./main";
 import { t, QnbLang } from "./i18n";
+import { GRADIENT_DIRECTIONS, defaultGradientEndColor, isHexColor, resolveCategoryBackground } from "./gradient";
+import type { QnbGradientDirection } from "./gradient";
+// ===== ANIMAZIONE SFUMATURA (inizio) =====
+import { normalizeGradientAnimationSeconds } from "./gradient";
+// ===== ANIMAZIONE SFUMATURA (fine) =====
+import { getContrastTextColor } from "./main";
 
 export type QnbBackgroundMode = "none" | "image" | "color";
 export type { QnbLang };
@@ -33,6 +39,17 @@ export interface QnbCategory {
 	icon: string;
 	/** Colore esplicito per l'icona; stringa vuota = automatico (stesso contrasto del titolo). */
 	iconColor: string;
+	/** Sfumatura di sfondo per la barra del titolo delle note: opzionale. Assente o falso =
+	 * colore singolo, come sempre. Il colore di inizio è `color`; gli altri due campi
+	 * servono solo quando è accesa. */
+	gradientEnabled?: boolean;
+	gradientEndColor?: string;
+	gradientDirection?: QnbGradientDirection;
+	// ===== ANIMAZIONE SFUMATURA (inizio) =====
+	gradientAnimated?: boolean;
+	gradientAnimationSeconds?: number;
+	gradientAnimateHoverOnly?: boolean;
+	// ===== ANIMAZIONE SFUMATURA (fine) =====
 	/** Gruppi definiti dentro questa categoria: stesso colore/icona della categoria, nessuno proprio. */
 	groups: QnbGroup[];
 }
@@ -300,6 +317,9 @@ export interface QuickNotesBoardSettings {
 	/** Se true, l'ultima volta che è stata aperta la finestra "Andamento della board" il
 	 * grafico mostrava le note modificate invece di quelle create. */
 	activityChartShowModified: boolean;
+	/** Ultima durata (minuti) scelta per il posticipo rapido di un allarme: è la voce
+	 * preselezionata la volta successiva. */
+	lastSnoozeMinutes: number;
 	boardStructureWindowWidth: number;
 	boardStructureWindowHeight: number;
 	/** Cartella del vault dove creare i file quando si trasforma una quick note in nota vera; vuota = radice del vault. */
@@ -350,6 +370,7 @@ export const DEFAULT_SETTINGS: QuickNotesBoardSettings = {
 	activityChartWindowHeight: 640,
 	activityChartHideEmptyDays: false,
 	activityChartShowModified: false,
+	lastSnoozeMinutes: 10,
 	boardStructureWindowWidth: 1000,
 	boardStructureWindowHeight: 600,
 	convertedNotesFolder: "",
@@ -1130,6 +1151,10 @@ export class QuickNotesBoardSettingTab extends PluginSettingTab {
 						})
 				);
 
+				// Aggiorna l'anteprima della categoria (definita più sotto, subito dopo i colori):
+				// va richiamata quando cambia qualsiasi colore, icona o impostazione della sfumatura.
+				let updateCategoryPreview: () => void = () => {};
+
 				// Colori della categoria, dentro il corpo comprimibile.
 				const colorsRow = new Setting(body).setName(this.tr("settings.categories.colorsLabel"));
 				colorsRow.addColorPicker((cp) => {
@@ -1140,6 +1165,7 @@ export class QuickNotesBoardSettingTab extends PluginSettingTab {
 					);
 					cp.onChange(async (value) => {
 						await this.plugin.updateCategoryColor(cat.name, value);
+						updateCategoryPreview();
 					});
 				});
 
@@ -1153,6 +1179,7 @@ export class QuickNotesBoardSettingTab extends PluginSettingTab {
 					);
 					cp.onChange(async (value) => {
 						await this.plugin.updateCategoryTitleColor(cat.name, value);
+						updateCategoryPreview();
 					});
 				});
 				colorsRow.addButton((btn) =>
@@ -1162,8 +1189,139 @@ export class QuickNotesBoardSettingTab extends PluginSettingTab {
 						.onClick(async () => {
 							await this.plugin.updateCategoryTitleColor(cat.name, "");
 							titleColorPicker?.setValue("#ffffff");
+							updateCategoryPreview();
 						})
 				);
+
+				// Anteprima, sempre visibile sotto i colori: una barra come quella del titolo di una
+				// nota di questa categoria, con nome e icona di esempio e gli stessi colori di
+				// testo/icona che avrebbe lì. Mostra il colore singolo, oppure la sfumatura se accesa.
+				const previewEl = body.createDiv({ cls: "qnb-category-preview" });
+				updateCategoryPreview = () => {
+					previewEl.empty();
+					const bg = resolveCategoryBackground(cat);
+					previewEl.setCssStyles({ backgroundColor: bg.color, backgroundImage: bg.image ?? "none" });
+					const fg = getContrastTextColor(bg.contrastBase);
+					previewEl.setCssStyles({ color: fg });
+					// ===== ANIMAZIONE SFUMATURA (inizio) =====
+					previewEl.toggleClass("qnb-gradient-animated", bg.animated && !bg.animateHoverOnly);
+					previewEl.toggleClass("qnb-gradient-animate-hover", bg.animated && bg.animateHoverOnly);
+					if (bg.animated) previewEl.setCssProps({ "--qnb-gradient-anim-seconds": `${bg.animationSeconds}s` });
+					// ===== ANIMAZIONE SFUMATURA (fine) =====
+					if (cat.icon) {
+						const iconEl = previewEl.createSpan({ cls: "qnb-category-preview-icon" });
+						setIcon(iconEl, cat.icon);
+						if (cat.iconColor) iconEl.setCssStyles({ color: cat.iconColor });
+					}
+					const titleEl = previewEl.createSpan({ cls: "qnb-category-preview-title", text: cat.name });
+					if (cat.titleColor) titleEl.setCssStyles({ color: cat.titleColor });
+				};
+				updateCategoryPreview();
+				body.addEventListener("qnb-category-style-changed", () => updateCategoryPreview());
+
+				// Sfumatura di sfondo (opzionale): con il toggle spento tutto resta com'è. I
+				// controlli si mostrano/nascondono sul posto, senza ridisegnare il pannello, così
+				// la posizione di scorrimento e lo stato aperto/chiuso delle categorie non cambiano.
+				const gradientToggleRow = new Setting(body)
+					.setName(this.tr("settings.categories.gradient.label"))
+					.setDesc(this.tr("settings.categories.gradient.desc"));
+				const gradientControls = body.createDiv({ cls: "qnb-gradient-controls" });
+				const setGradientControlsVisible = (visible: boolean) => {
+					gradientControls.setCssStyles({ display: visible ? "block" : "none" });
+				};
+				let gradientEndPicker: ColorComponent | null = null;
+				gradientToggleRow.addToggle((toggle) => {
+					toggle.setValue(cat.gradientEnabled === true);
+					toggle.onChange(async (value) => {
+						if (value && !isHexColor(cat.gradientEndColor)) {
+							// Prima volta: propone un colore finale, così l'effetto si vede subito.
+							const proposed = defaultGradientEndColor(cat.color);
+							await this.plugin.updateCategoryGradient(cat.name, { enabled: true, endColor: proposed });
+							gradientEndPicker?.setValue(proposed);
+						} else {
+							await this.plugin.updateCategoryGradient(cat.name, { enabled: value });
+						}
+						setGradientControlsVisible(value);
+						updateCategoryPreview();
+					});
+				});
+				setGradientControlsVisible(cat.gradientEnabled === true);
+
+				new Setting(gradientControls)
+					.setName(this.tr("settings.categories.gradient.endColor"))
+					.addColorPicker((cp) => {
+						gradientEndPicker = cp;
+						// Se il colore finale non è mai stato scelto si parte dal colore di inizio.
+						cp.setValue(isHexColor(cat.gradientEndColor) ? cat.gradientEndColor : cat.color);
+						(cp as unknown as { colorPickerEl: HTMLInputElement }).colorPickerEl.setAttr(
+							"aria-label",
+							this.tr("settings.categories.gradient.endColorTooltip")
+						);
+						cp.onChange(async (value) => {
+							await this.plugin.updateCategoryGradient(cat.name, { endColor: value });
+							updateCategoryPreview();
+						});
+					});
+
+				// ===== ANIMAZIONE SFUMATURA (inizio) — per togliere la funzione, cercare
+				// questo stesso marcatore in tutti i file e rimuovere quanto racchiude.
+				// Subito sotto il colore finale, come richiesto: un toggle "Animazione
+				// titolo della barra" e, solo quando acceso, la durata in secondi (1-10) e
+				// la scelta "solo al passaggio del mouse o in modifica". =====
+				const animationToggleRow = new Setting(gradientControls).setName(
+					this.tr("settings.categories.gradient.animation.label")
+				);
+				const animationDurationRow = new Setting(gradientControls)
+					.setClass("qnb-gradient-animation-row")
+					.setName(this.tr("settings.categories.gradient.animation.duration"));
+				const animationHoverOnlyRow = new Setting(gradientControls)
+					.setClass("qnb-gradient-animation-row")
+					.setName(this.tr("settings.categories.gradient.animation.hoverOnly"));
+				const setAnimationSubOptionsVisible = (visible: boolean) => {
+					const display = visible ? "flex" : "none";
+					animationDurationRow.settingEl.setCssStyles({ display });
+					animationHoverOnlyRow.settingEl.setCssStyles({ display });
+				};
+				animationToggleRow.addToggle((toggle) => {
+					toggle.setValue(cat.gradientAnimated === true);
+					toggle.onChange(async (value) => {
+						await this.plugin.updateCategoryGradient(cat.name, { animated: value });
+						setAnimationSubOptionsVisible(value);
+						updateCategoryPreview();
+					});
+				});
+				animationDurationRow.addSlider((slider) => {
+					slider
+						.setLimits(1, 10, 1)
+						.setValue(normalizeGradientAnimationSeconds(cat.gradientAnimationSeconds))
+						.setDynamicTooltip()
+						.onChange(async (value) => {
+							await this.plugin.updateCategoryGradient(cat.name, { animationSeconds: value });
+							updateCategoryPreview();
+						});
+				});
+				animationHoverOnlyRow.addToggle((toggle) => {
+					toggle.setValue(cat.gradientAnimateHoverOnly === true);
+					toggle.onChange(async (value) => {
+						await this.plugin.updateCategoryGradient(cat.name, { hoverOnly: value });
+						updateCategoryPreview();
+					});
+				});
+				setAnimationSubOptionsVisible(cat.gradientAnimated === true);
+				// ===== ANIMAZIONE SFUMATURA (fine) =====
+
+				new Setting(gradientControls)
+					.setName(this.tr("settings.categories.gradient.direction"))
+					.addDropdown((dd) => {
+						for (const opt of GRADIENT_DIRECTIONS) dd.addOption(opt.value, this.tr(opt.labelKey));
+						dd.setValue(cat.gradientDirection ?? "to-right");
+						dd.onChange(async (value) => {
+							await this.plugin.updateCategoryGradient(cat.name, {
+								direction: value as QnbGradientDirection,
+							});
+							updateCategoryPreview();
+						});
+					});
 
 				// Ordine richiesto: prima gruppi e sottogruppi, poi icona (e le altre opzioni).
 				this.buildCategoryGroupsSection(body, cat);
@@ -1249,6 +1407,11 @@ export class QuickNotesBoardSettingTab extends PluginSettingTab {
 		const wrapper = containerEl.createDiv({ cls: "qnb-icon-picker" });
 		wrapper.createSpan({ cls: "qnb-icon-picker-label", text: this.tr("settings.categories.iconTooltip") });
 
+		// Avvisa la scheda della categoria che icona o colore icona sono cambiati, così
+		// l'anteprima della sfumatura (più in alto nella stessa scheda) resta aggiornata.
+		const notifyStyleChanged = () =>
+			wrapper.dispatchEvent(new CustomEvent("qnb-category-style-changed", { bubbles: true }));
+
 		const grid = wrapper.createDiv({ cls: "qnb-icon-picker-grid" });
 		const quickButtons: HTMLElement[] = [];
 
@@ -1268,6 +1431,7 @@ export class QuickNotesBoardSettingTab extends PluginSettingTab {
 				void (async () => {
 					cat.icon = opt.value;
 					await this.plugin.updateCategoryIcon(cat.name, opt.value);
+					notifyStyleChanged();
 					// Aggiorna solo l'evidenziazione, senza ricostruire l'intero pannello:
 					// altrimenti la pagina tornerebbe in cima ad ogni scelta.
 					highlightQuickMatch(opt.value);
@@ -1304,6 +1468,7 @@ export class QuickNotesBoardSettingTab extends PluginSettingTab {
 			if (trimmed === (cat.icon || "")) return;
 			cat.icon = trimmed;
 			await this.plugin.updateCategoryIcon(cat.name, trimmed);
+			notifyStyleChanged();
 			highlightQuickMatch(trimmed); // se combacia per caso con una rapida, la evidenzia anche lì
 		};
 
@@ -1336,6 +1501,7 @@ export class QuickNotesBoardSettingTab extends PluginSettingTab {
 			void (async () => {
 				cat.iconColor = colorInput.value;
 				await this.plugin.updateCategoryIconColor(cat.name, colorInput.value);
+				notifyStyleChanged();
 			})();
 		});
 		colorRow.createEl("button", {
@@ -1346,6 +1512,7 @@ export class QuickNotesBoardSettingTab extends PluginSettingTab {
 			void (async () => {
 				cat.iconColor = "";
 				await this.plugin.updateCategoryIconColor(cat.name, "");
+				notifyStyleChanged();
 				colorInput.value = "#ffffff";
 				previewEl.setCssStyles({ color: "" });
 			})();

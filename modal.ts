@@ -4,6 +4,7 @@ import type QuickNotesBoardPlugin from "./main";
 import type { QuickNote, QnbFontFamily } from "./main";
 import { getContrastTextColor } from "./main";
 import { t, QnbLang } from "./i18n";
+import { SNOOZE_OPTIONS_MINUTES, formatClock, formatSnoozeLabel, normalizeSnoozeMinutes } from "./snooze";
 
 /** Colora le <option> di un <select> categoria con lo stesso colore configurato per quella categoria. */
 function colorizeCategoryOptions(selectEl: HTMLSelectElement, categories: QnbCategory[]) {
@@ -717,13 +718,34 @@ export class NoteInfoModal extends Modal {
 	private lang: QnbLang;
 	private note: QuickNote;
 	private groupPath: string;
+	private onDuplicate: () => void;
+	// ===== CESTINA/ARCHIVIA DAL PANNELLO INFORMATIVO (inizio) — per togliere la funzione,
+	// cercare questo stesso marcatore in tutti i file e rimuovere quanto racchiude. =====
+	private onArchive: () => void;
+	private onTrash: () => void;
+	// ===== CESTINA/ARCHIVIA DAL PANNELLO INFORMATIVO (fine) =====
 
-	constructor(app: App, plugin: QuickNotesBoardPlugin, note: QuickNote, groupPath: string) {
+	constructor(
+		app: App,
+		plugin: QuickNotesBoardPlugin,
+		note: QuickNote,
+		groupPath: string,
+		onDuplicate: () => void,
+		// ===== CESTINA/ARCHIVIA DAL PANNELLO INFORMATIVO (inizio) =====
+		onArchive: () => void,
+		onTrash: () => void
+		// ===== CESTINA/ARCHIVIA DAL PANNELLO INFORMATIVO (fine) =====
+	) {
 		super(app);
 		this.plugin = plugin;
 		this.lang = plugin.settings.language;
 		this.note = note;
 		this.groupPath = groupPath;
+		this.onDuplicate = onDuplicate;
+		// ===== CESTINA/ARCHIVIA DAL PANNELLO INFORMATIVO (inizio) =====
+		this.onArchive = onArchive;
+		this.onTrash = onTrash;
+		// ===== CESTINA/ARCHIVIA DAL PANNELLO INFORMATIVO (fine) =====
 	}
 
 	private tr(key: string, vars?: Record<string, string>): string {
@@ -770,9 +792,27 @@ export class NoteInfoModal extends Modal {
 			}
 		}
 
-		new Setting(contentEl).addButton((btn) =>
-			btn.setButtonText(this.tr("trash.close")).onClick(() => this.close())
-		);
+		// Riga finale: "Duplica nota" a sinistra, "Chiudi" a destra — stesso schema della
+		// riga dei toggle in "Andamento della board".
+		const footer = contentEl.createDiv({ cls: "qnb-note-info-footer" });
+		new ButtonComponent(footer).setButtonText(this.tr("modal.noteInfo.duplicate")).onClick(() => {
+			this.close();
+			this.onDuplicate();
+		});
+		// ===== CESTINA/ARCHIVIA DAL PANNELLO INFORMATIVO (inizio) — stessa logica delle
+		// icone sulla nota (nessuna richiesta di conferma: sono azioni reversibili, si
+		// recuperano da Archivio/Cestino), applicata sempre a questa nota soltanto, a
+		// prescindere da un'eventuale selezione multipla attiva altrove sulla board. =====
+		new ButtonComponent(footer).setButtonText(this.tr("modal.noteInfo.archive")).onClick(() => {
+			this.close();
+			this.onArchive();
+		});
+		new ButtonComponent(footer).setButtonText(this.tr("modal.noteInfo.trash")).onClick(() => {
+			this.close();
+			this.onTrash();
+		});
+		// ===== CESTINA/ARCHIVIA DAL PANNELLO INFORMATIVO (fine) =====
+		new ButtonComponent(footer).setButtonText(this.tr("trash.close")).onClick(() => this.close());
 	}
 
 	onClose() {
@@ -1654,6 +1694,7 @@ export class DueDateModal extends Modal {
 						);
 						this.note.dueDate = next.dueDate;
 						this.note.reminderStartDate = next.reminderStartDate;
+						this.note.reminderSnoozeUntil = undefined;
 						this.plugin.stopDueAlarm(this.note.id);
 						await this.plugin.saveNotes();
 						this.dueDate = next.dueDate;
@@ -1693,6 +1734,8 @@ export class DueDateModal extends Modal {
 					this.note.reminderRepeat = this.repeat === "none" ? undefined : this.repeat;
 					this.note.reminderRepeatEvery = this.repeat === "none" ? undefined : this.repeatEvery;
 					this.note.skipWeekends = this.skipWeekends || undefined;
+					// Un allarme appena modificato riparte da zero: niente posticipo residuo.
+					this.note.reminderSnoozeUntil = undefined;
 					await this.plugin.saveNotes();
 					this.onSaved();
 					this.close();
@@ -1710,6 +1753,7 @@ export class DueDateModal extends Modal {
 					this.note.reminderRepeatEvery = undefined;
 					this.note.skipWeekends = undefined;
 					this.note.reminderFireCount = undefined;
+					this.note.reminderSnoozeUntil = undefined;
 					this.plugin.stopDueAlarm(this.note.id);
 					await this.plugin.saveNotes();
 					this.onSaved();
@@ -1816,8 +1860,14 @@ export class AlarmListModal extends Modal {
 							(t) => new Date(`${note.dueDate}T${t}:00`).getTime() > Date.now()
 						) ?? note.reminderStartTimes[note.reminderStartTimes.length - 1])
 					: note.reminderStartTime;
+			// Con un posticipo rapido in corso, al posto del conto alla rovescia (che
+			// direbbe "scaduto") si mostra fino a quando l'allarme è in pausa.
+			const snoozedUntil =
+				note.reminderSnoozeUntil && note.reminderSnoozeUntil > Date.now() ? note.reminderSnoozeUntil : 0;
 			row.createDiv({
-				text: formatTimeRemaining(note.dueDate || "", timeForCountdown, (key, vars) => this.tr(key, vars)),
+				text: snoozedUntil
+					? this.tr("modal.alarmList.snoozedUntil", { time: formatClock(snoozedUntil) })
+					: formatTimeRemaining(note.dueDate || "", timeForCountdown, (key, vars) => this.tr(key, vars)),
 			});
 			row.createDiv({ text: String(note.reminderFireCount || 0) });
 		}
@@ -2394,5 +2444,116 @@ export class MissedRemindersModal extends Modal {
 
 	onClose() {
 		this.contentEl.empty();
+	}
+}
+
+/** Finestra di dialogo dell'allarme in corso: nome della nota, scelta di quanto posticipare e
+ * pulsanti "Posticipa" e "Ferma". Chiuderla in un altro modo (X, Esc, clic fuori) equivale a
+ * "Ferma", come faceva un clic sulla vecchia notifica. Se invece è il plugin a chiuderla
+ * (l'allarme è stato fermato o posticipato da un'altra parte) non scatta nulla di tutto
+ * ciò: `closeQuietly` esiste per questo. */
+export class AlarmRingModal extends Modal {
+	private plugin: QuickNotesBoardPlugin;
+	private note: QuickNote;
+	private handlers: { onSnooze: (minutes: number) => void; onStop: () => void; onPostponeToNext: () => void };
+	private selectedMinutes: number;
+	/** Vero appena l'utente ha scelto (o il plugin ha chiuso): evita di fermare due volte. */
+	private settled = false;
+	private closed = false;
+
+	constructor(
+		app: App,
+		plugin: QuickNotesBoardPlugin,
+		note: QuickNote,
+		handlers: { onSnooze: (minutes: number) => void; onStop: () => void; onPostponeToNext: () => void }
+	) {
+		super(app);
+		this.plugin = plugin;
+		this.note = note;
+		this.handlers = handlers;
+		this.selectedMinutes = normalizeSnoozeMinutes(plugin.settings.lastSnoozeMinutes);
+	}
+
+	private tr(key: string, vars?: Record<string, string>): string {
+		return t(this.plugin.settings.language, key, vars);
+	}
+
+	onOpen() {
+		const { contentEl } = this;
+		contentEl.empty();
+		contentEl.addClass("qnb-alarm-dialog");
+		this.titleEl.setText(this.tr("snooze.dialog.title"));
+
+		contentEl.createEl("p", { cls: "qnb-alarm-dialog-note", text: this.note.title });
+
+		new Setting(contentEl).setName(this.tr("snooze.label")).addDropdown((dd) => {
+			for (const minutes of SNOOZE_OPTIONS_MINUTES) {
+				dd.addOption(String(minutes), formatSnoozeLabel(minutes, (key, vars) => this.tr(key, vars)));
+			}
+			dd.setValue(String(this.selectedMinutes));
+			dd.onChange((value) => {
+				this.selectedMinutes = normalizeSnoozeMinutes(parseInt(value, 10));
+			});
+		});
+
+		const buttonsRow = new Setting(contentEl);
+		// Solo se questo allarme ha una ripetizione attiva: evita di dover aprire il
+		// pannello principale della nota solo per posticipare al prossimo ciclo. A sinistra
+		// degli altri due, essendo l'azione meno frequente delle due comuni.
+		if (this.note.dueDate && this.note.reminderRepeat) {
+			buttonsRow.addButton((btn) =>
+				btn.setButtonText(this.tr("snooze.postponeToNext")).onClick(() => this.postponeToNext())
+			);
+		}
+		buttonsRow
+			.addButton((btn) =>
+				btn
+					.setButtonText(this.tr("snooze.button"))
+					.setCta()
+					.onClick(() => this.snooze())
+			)
+			.addButton((btn) => btn.setButtonText(this.tr("snooze.stop")).onClick(() => this.stop()));
+	}
+
+	/** Pulsante "Posticipa": chiude la finestra e posticipa della durata scelta. */
+	snooze() {
+		if (this.settled) return;
+		this.settled = true;
+		this.close();
+		this.handlers.onSnooze(this.selectedMinutes);
+	}
+
+	/** Pulsante "Posticipa alla prossima programmazione": stessa azione del pulsante
+	 * omonimo nel pannello principale della nota, senza doverlo aprire. */
+	postponeToNext() {
+		if (this.settled) return;
+		this.settled = true;
+		this.close();
+		this.handlers.onPostponeToNext();
+	}
+
+	/** Pulsante "Ferma": chiude la finestra e ferma l'allarme. */
+	stop() {
+		if (this.settled) return;
+		this.settled = true;
+		this.close();
+		this.handlers.onStop();
+	}
+
+	/** Chiusura decisa dal plugin: non innesca "Ferma". Ignorata se è già chiusa. */
+	closeQuietly() {
+		if (this.closed) return;
+		this.settled = true;
+		this.close();
+	}
+
+	onClose() {
+		this.closed = true;
+		this.contentEl.empty();
+		// Chiusa con X, Esc o un clic fuori dalla finestra: vale come "Ferma".
+		if (!this.settled) {
+			this.settled = true;
+			this.handlers.onStop();
+		}
 	}
 }

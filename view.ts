@@ -1,4 +1,4 @@
-import { ItemView, WorkspaceLeaf, MarkdownRenderer, setIcon, Notice } from "obsidian";
+import { ItemView, WorkspaceLeaf, MarkdownRenderer, Menu, setIcon, Notice } from "obsidian";
 import type QuickNotesBoardPlugin from "./main";
 import type { QuickNote } from "./main";
 import { DEFAULT_FONT_SIZE, DEFAULT_FONT_FAMILY, DEFAULT_FONT_COLOR, DEFAULT_BG_COLOR, FONT_FAMILY_CSS, getContrastTextColor } from "./main";
@@ -6,6 +6,7 @@ import { NewNoteModal, ChangeCategoryModal, FontSizeModal, TrashModal, ArchiveMo
 import { t } from "./i18n";
 import type { QnbCategory, QnbGroup, QnbNoteIconId } from "./settings";
 import { encryptText, decryptText, DecryptionError } from "./crypto";
+import { SNOOZE_OPTIONS_MINUTES, formatSnoozeLabel, normalizeSnoozeMinutes } from "./snooze";
 
 export const VIEW_TYPE_QNB = "quick-notes-board-view";
 
@@ -796,11 +797,17 @@ export class QuickNotesBoardView extends ItemView {
 			// in modo che di ogni nota sottostante resti visibile il solo titolo. Se la
 			// cascata non ci sta in altezza ne parte un'altra a destra della precedente; se
 			// non ci sta nemmeno in larghezza, sotto.
+			// ===== ALLEGGERIMENTO NOTE FUORI SCHERMO (inizio) — sblocca temporaneamente il
+			// disegno delle note (anche quelle fuori dallo scroll) solo per la durata di
+			// questa misura, altrimenti per una nota scrollata via risulterebbe 0.
+			this.boardEl.addClass("qnb-measuring-headers");
 			let headerH = 0;
 			for (const n of sorted) {
 				const h = this.noteElements.get(n.id)?.querySelector<HTMLElement>(".qnb-note-header")?.offsetHeight ?? 0;
 				headerH = Math.max(headerH, h);
 			}
+			this.boardEl.removeClass("qnb-measuring-headers");
+			// ===== ALLEGGERIMENTO NOTE FUORI SCHERMO (fine) =====
 			const stepY = (headerH || 40) + 2;
 			const stepX = 24;
 			const viewWidth = Math.max(this.boardEl.clientWidth, startX + 260);
@@ -951,6 +958,54 @@ export class QuickNotesBoardView extends ItemView {
 			this.renderBoard();
 			})();
 		}).open();
+	}
+
+	// ===== CESTINA/ARCHIVIA DAL PANNELLO INFORMATIVO (inizio) — per togliere la funzione,
+	// cercare questo stesso marcatore in tutti i file e rimuovere quanto racchiude.
+	// Stessa identica logica delle icone corrispondenti sulla nota (suono, rimozione
+	// dall'ordine di sovrapposizione, salvataggio), ma sempre su questa nota soltanto,
+	// mai in blocco su un'eventuale selezione multipla: il pannello informativo si apre
+	// su una nota precisa, quindi è quella l'unica su cui ha senso agire da qui.
+	private async archiveNoteFromInfoPanel(note: QuickNote) {
+		note.archived = true;
+		const idx = this.noteOrder.indexOf(note.id);
+		if (idx !== -1) this.noteOrder.splice(idx, 1);
+		this.plugin.playSound("note-archive");
+		await this.plugin.saveNotes();
+		this.refreshVisibilityButtons();
+		this.renderBoard();
+	}
+
+	private async trashNoteFromInfoPanel(note: QuickNote) {
+		note.deleted = true;
+		const idx = this.noteOrder.indexOf(note.id);
+		if (idx !== -1) this.noteOrder.splice(idx, 1);
+		this.plugin.playSound("note-delete");
+		await this.plugin.saveNotes();
+		this.refreshVisibilityButtons();
+		this.renderBoard();
+	}
+	// ===== CESTINA/ARCHIVIA DAL PANNELLO INFORMATIVO (fine) =====
+
+	/** Duplica una nota: copia fedele di tutto il contenuto (testo, categoria, gruppo,
+	 * colori, font, etichette, blocco note, allarme...), con un id nuovo, posizionata 24px
+	 * più in basso e a destra dell'originale così è subito visibile accanto ad essa, e
+	 * portata in primo piano. Non porta con sé lo stato di un eventuale posticipo rapido in
+	 * corso né il contatore delle volte suonate: sono storia dell'istanza originale, non
+	 * qualcosa che ha senso clonare in una copia appena creata. */
+	private async duplicateNote(source: QuickNote) {
+		const copy: QuickNote = JSON.parse(JSON.stringify(source));
+		copy.id = cryptoRandomId();
+		copy.x = source.x + 24;
+		copy.y = source.y + 24;
+		copy.createdAt = Date.now();
+		copy.modifiedAt = Date.now();
+		copy.reminderSnoozeUntil = undefined;
+		copy.reminderFireCount = undefined;
+		this.plugin.notes.push(copy);
+		await this.plugin.saveNotes();
+		this.refreshVisibilityButtons();
+		this.renderBoard();
 	}
 
 	/** Vero se il testo di ricerca corrente compare nel titolo (sempre) o nel contenuto
@@ -1306,6 +1361,45 @@ export class QuickNotesBoardView extends ItemView {
 		}
 	}
 
+	/** Menu sull'icona allarme di una nota con allarme in corso: le durate di posticipo,
+	 * poi "Ferma" e "Apri pannello allarme" (il comportamento che l'icona aveva prima). */
+	private showSnoozeMenu(evt: MouseEvent, note: QuickNote) {
+		const menu = new Menu();
+		const lastUsed = normalizeSnoozeMinutes(this.plugin.settings.lastSnoozeMinutes);
+		for (const minutes of SNOOZE_OPTIONS_MINUTES) {
+			const label = formatSnoozeLabel(minutes, (key, vars) => this.tr(key, vars));
+			menu.addItem((item) =>
+				item
+					.setTitle(this.tr("snooze.menuItem", { label }))
+					.setChecked(minutes === lastUsed)
+					.onClick(() => {
+						void this.plugin.snoozeAlarm(note.id, minutes);
+					})
+			);
+		}
+		menu.addSeparator();
+		menu.addItem((item) =>
+			item
+				.setTitle(this.tr("snooze.stop"))
+				.setIcon("bell-off")
+				.onClick(() => {
+					this.plugin.stopDueAlarm(note.id);
+					this.refreshDueBorders();
+				})
+		);
+		menu.addItem((item) =>
+			item
+				.setTitle(this.tr("snooze.openPanel"))
+				.setIcon("bell")
+				.onClick(() => {
+					this.plugin.stopDueAlarm(note.id);
+					this.plugin.playSound("note-due-date-open");
+					new DueDateModal(this.app, this.plugin, note, () => this.renderBoard()).open();
+				})
+		);
+		menu.showAtMouseEvent(evt);
+	}
+
 	private bringToFront(note: QuickNote, noteEl: HTMLElement) {
 		const idx = this.noteOrder.indexOf(note.id);
 		if (idx !== -1) this.noteOrder.splice(idx, 1);
@@ -1373,11 +1467,26 @@ export class QuickNotesBoardView extends ItemView {
 		// Header: tutta l'area è trascinabile (nessun testo cliccabile/editabile qui)
 		const header = noteEl.createDiv({ cls: "qnb-note-header" });
 
-		const categoryColor = this.plugin.getCategoryColor(note.category);
-		if (categoryColor) {
+		const categoryBg = this.plugin.getCategoryBackground(note.category);
+		// Stessa condizione di prima: nessun colore impostato = nessuna barra colorata.
+		if (categoryBg && categoryBg.color) {
 			header.addClass("qnb-note-header-colored");
-			header.setCssStyles({ backgroundColor: categoryColor });
-			header.setCssProps({ "--qnb-header-fg": getContrastTextColor(categoryColor) });
+			// Il colore singolo resta sempre impostato (anche come riserva); solo se la
+			// categoria ha una sfumatura valida si aggiunge l'immagine sopra di esso.
+			header.setCssStyles({ backgroundColor: categoryBg.color });
+			if (categoryBg.image) header.setCssStyles({ backgroundImage: categoryBg.image });
+			header.setCssProps({ "--qnb-header-fg": getContrastTextColor(categoryBg.contrastBase) });
+			// ===== ANIMAZIONE SFUMATURA (inizio) — solo se davvero animata: altrimenti
+			// niente classe, niente variabile, barra identica a prima di questa funzione.
+			// Due classi mutuamente esclusive: sempre animata, oppure solo al passaggio
+			// del mouse/modifica/trascinamento (la seconda gestita dal solo CSS, tramite
+			// gli stessi stati già usati per le icone compatte). =====
+			header.toggleClass("qnb-gradient-animated", categoryBg.animated && !categoryBg.animateHoverOnly);
+			header.toggleClass("qnb-gradient-animate-hover", categoryBg.animated && categoryBg.animateHoverOnly);
+			if (categoryBg.animated) {
+				header.setCssProps({ "--qnb-gradient-anim-seconds": `${categoryBg.animationSeconds}s` });
+			}
+			// ===== ANIMAZIONE SFUMATURA (fine) =====
 		}
 
 		const categoryIconId = this.plugin.getCategoryIcon(note.category);
@@ -1687,6 +1796,12 @@ export class QuickNotesBoardView extends ItemView {
 				alarmBtn.addEventListener("mousedown", (evt) => evt.stopPropagation());
 				alarmBtn.addEventListener("click", (evt) => {
 					evt.stopPropagation();
+					// Allarme in corso (bordo lampeggiante): prima si sceglie cosa farne — posticipare,
+					// fermare o aprire il pannello. Altrimenti si apre direttamente il pannello.
+					if (this.plugin.isNoteDueActive(note)) {
+						this.showSnoozeMenu(evt, note);
+						return;
+					}
 					this.plugin.stopDueAlarm(note.id);
 					this.plugin.playSound("note-due-date-open");
 					new DueDateModal(this.app, this.plugin, note, () => this.renderBoard()).open();
@@ -1859,7 +1974,17 @@ export class QuickNotesBoardView extends ItemView {
 		header.addEventListener("contextmenu", (evt: MouseEvent) => {
 			evt.preventDefault();
 			const groupPath = note.groupId ? this.plugin.getGroupPath(note.category, note.groupId) : "";
-			new NoteInfoModal(this.app, this.plugin, note, groupPath).open();
+			new NoteInfoModal(
+				this.app,
+				this.plugin,
+				note,
+				groupPath,
+				() => this.duplicateNote(note),
+				// ===== CESTINA/ARCHIVIA DAL PANNELLO INFORMATIVO (inizio) =====
+				() => this.archiveNoteFromInfoPanel(note),
+				() => this.trashNoteFromInfoPanel(note)
+				// ===== CESTINA/ARCHIVIA DAL PANNELLO INFORMATIVO (fine) =====
+			).open();
 		});
 
 		// Fascia sottile in fondo alla nota, sopra le maniglie di ridimensionamento: oggi

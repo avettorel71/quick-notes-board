@@ -1,5 +1,15 @@
 import { Plugin, WorkspaceLeaf, normalizePath, Notice } from "obsidian";
-import { MissedRemindersModal, addRepeatInterval } from "./modal";
+import { MissedRemindersModal, AlarmRingModal, addRepeatInterval } from "./modal";
+import { computeSnooze, formatClock, normalizeSnoozeMinutes } from "./snooze";
+import {
+	isHexColor,
+	normalizeGradientDirection,
+	resolveCategoryBackground,
+	// ===== ANIMAZIONE SFUMATURA (inizio) =====
+	normalizeGradientAnimationSeconds,
+	// ===== ANIMAZIONE SFUMATURA (fine) =====
+} from "./gradient";
+import type { QnbGradientDirection, ResolvedCategoryBackground } from "./gradient";
 
 // Compressione del file dati: etichetta riconoscibile all'inizio del file quando è
 // compresso. La lettura si basa SEMPRE su questa etichetta, mai sull'impostazione
@@ -165,6 +175,11 @@ export interface QuickNote {
 	/** Quante volte l'allarme è effettivamente scattato (notifica + suono). Assente = 0.
 	 * Si azzera solo rimuovendo l'allarme dalla nota. */
 	reminderFireCount?: number;
+	/** Istante (ms) fino al quale l'allarme è in pausa dopo un "posticipo rapido". Finché è
+	 * nel futuro, isNoteDueActive risponde falso (niente suono, bordo o notifica); allo
+	 * scadere l'allarme torna normale e il campo viene azzerato. Assente = nessun
+	 * posticipo. Nel file è salvato in secondi ("remsnooze"). */
+	reminderSnoozeUntil?: number;
 	/** Id delle etichette assegnate a questa nota (elenco piatto, definito in
 	 * Impostazioni). Una nota può averne quante ne vuole insieme. */
 	labelIds?: string[];
@@ -304,6 +319,9 @@ export default class QuickNotesBoardPlugin extends Plugin {
 	private dataFileCorrupted = false;
 	/** Audio dell'allarme attualmente in loop per nota (finché non viene fermato). */
 	private activeDueAlarms = new Map<string, HTMLAudioElement>();
+	/** Finestra di dialogo aperta per nota mentre l'allarme suona: serve a chiuderla anche
+	 * quando l'allarme viene fermato o posticipato da un'altra parte (icona della nota). */
+	private activeDueDialogs = new Map<string, AlarmRingModal>();
 
 	tr(key: string, vars?: Record<string, string>): string {
 		return t(this.settings.language, key, vars);
@@ -383,6 +401,20 @@ export default class QuickNotesBoardPlugin extends Plugin {
 			titleColor: c.titleColor ?? "",
 			icon: c.icon ?? "",
 			iconColor: c.iconColor ?? "",
+			// Sfumatura: solo se già presente nel file, così per chi non la usa i dati
+			// restano esattamente com'erano (undefined non viene scritto nel JSON).
+			gradientEnabled: typeof c.gradientEnabled === "boolean" ? c.gradientEnabled : undefined,
+			gradientEndColor: isHexColor(c.gradientEndColor) ? c.gradientEndColor : undefined,
+			gradientDirection: c.gradientDirection ? normalizeGradientDirection(c.gradientDirection) : undefined,
+			// ===== ANIMAZIONE SFUMATURA (inizio) — stesso principio: presente solo se già
+			// nel file, altrimenti undefined e non scritto mai. =====
+			gradientAnimated: typeof c.gradientAnimated === "boolean" ? c.gradientAnimated : undefined,
+			gradientAnimationSeconds:
+				typeof c.gradientAnimationSeconds === "number"
+					? normalizeGradientAnimationSeconds(c.gradientAnimationSeconds)
+					: undefined,
+			gradientAnimateHoverOnly: typeof c.gradientAnimateHoverOnly === "boolean" ? c.gradientAnimateHoverOnly : undefined,
+			// ===== ANIMAZIONE SFUMATURA (fine) =====
 			groups: normalizeGroups(c.groups),
 		}));
 
@@ -731,6 +763,13 @@ export default class QuickNotesBoardPlugin extends Plugin {
 		return this.settings.categories.find((c) => c.name === name)?.color;
 	}
 
+	/** Come colorare lo sfondo della barra del titolo delle note di una categoria: colore
+	 * singolo (come sempre) oppure, se la sfumatura è accesa e valida, anche l'immagine. */
+	getCategoryBackground(name: string): ResolvedCategoryBackground | undefined {
+		const cat = this.settings.categories.find((c) => c.name === name);
+		return cat ? resolveCategoryBackground(cat) : undefined;
+	}
+
 	getCategoryTitleColor(name: string): string | undefined {
 		return this.settings.categories.find((c) => c.name === name)?.titleColor || undefined;
 	}
@@ -756,6 +795,38 @@ export default class QuickNotesBoardPlugin extends Plugin {
 		const cat = this.settings.categories.find((c) => c.name === name);
 		if (!cat) return;
 		cat.color = color;
+		await this.saveSettings();
+		this.refreshOpenViews();
+	}
+
+	/** Aggiorna la sfumatura di sfondo di una categoria. Aggiornare solo alcuni dei campi
+	 * lascia gli altri come sono: spegnere il toggle non cancella colore finale e orientamento,
+	 * così riaccendendolo si ritrova la sfumatura di prima. */
+	async updateCategoryGradient(
+		name: string,
+		patch: {
+			enabled?: boolean;
+			endColor?: string;
+			direction?: QnbGradientDirection;
+			// ===== ANIMAZIONE SFUMATURA (inizio) =====
+			animated?: boolean;
+			animationSeconds?: number;
+			hoverOnly?: boolean;
+			// ===== ANIMAZIONE SFUMATURA (fine) =====
+		}
+	) {
+		const cat = this.settings.categories.find((c) => c.name === name);
+		if (!cat) return;
+		if (patch.enabled !== undefined) cat.gradientEnabled = patch.enabled;
+		if (patch.endColor !== undefined && isHexColor(patch.endColor)) cat.gradientEndColor = patch.endColor;
+		if (patch.direction !== undefined) cat.gradientDirection = normalizeGradientDirection(patch.direction);
+		// ===== ANIMAZIONE SFUMATURA (inizio) =====
+		if (patch.animated !== undefined) cat.gradientAnimated = patch.animated;
+		if (patch.animationSeconds !== undefined) {
+			cat.gradientAnimationSeconds = normalizeGradientAnimationSeconds(patch.animationSeconds);
+		}
+		if (patch.hoverOnly !== undefined) cat.gradientAnimateHoverOnly = patch.hoverOnly;
+		// ===== ANIMAZIONE SFUMATURA (fine) =====
 		await this.saveSettings();
 		this.refreshOpenViews();
 	}
@@ -887,6 +958,9 @@ export default class QuickNotesBoardPlugin extends Plugin {
 	 * controllo periodico che invia gli avvisi e il bordo visivo sulla board. */
 	isNoteDueActive(note: QuickNote): boolean {
 		if (!note.dueDate || note.deleted || note.archived) return false;
+		// Posticipo rapido in corso: allarme in pausa. Essendo qui, e non nel solo invio
+		// dell'avviso, bordo lampeggiante, suono e notifica si spengono tutti insieme.
+		if (note.reminderSnoozeUntil && Date.now() < note.reminderSnoozeUntil) return false;
 		const now = new Date();
 		if (note.skipWeekends) {
 			const dayOfWeek = now.getDay(); // 0 = domenica, 6 = sabato
@@ -984,6 +1058,10 @@ export default class QuickNotesBoardPlugin extends Plugin {
 	private catchUpNoteIfExhausted(note: QuickNote): boolean {
 		const { reminderStartTimes } = note;
 		if (!reminderStartTimes || reminderStartTimes.length === 0) return false;
+		// Con un posticipo rapido pendente gli orari di oggi risultano "passati" ma non
+		// sono affatto persi: l'allarme deve ancora suonare. Non avanzare finché il
+		// posticipo non è scaduto e ripreso (il campo si azzera nel controllo periodico).
+		if (note.reminderSnoozeUntil) return false;
 
 		const todayStr = this.getTodayDateStr();
 		const nowHHMM = this.getCurrentHHMM();
@@ -1060,8 +1138,16 @@ export default class QuickNotesBoardPlugin extends Plugin {
 		this.refreshDueBordersInOpenViews();
 
 		for (const note of this.notes) {
+			// Posticipo scaduto: l'allarme torna normale e, se ancora dovuto, suona subito
+			// (nell'iterazione stessa, valutando isNoteDueActive subito dopo).
+			if (note.reminderSnoozeUntil && Date.now() >= note.reminderSnoozeUntil) {
+				note.reminderSnoozeUntil = undefined;
+				void this.saveNotes();
+			}
 			if (!this.isNoteDueActive(note)) continue;
-			if (this.activeDueAlarms.has(note.id)) continue; // già in corso, non sovrapporre
+			// Già in corso (suono o finestra ancora aperta): non sovrapporre. Contare anche la
+			// finestra evita che, senza un suono configurato, se ne riapra una ogni controllo.
+			if (this.activeDueAlarms.has(note.id) || this.activeDueDialogs.has(note.id)) continue;
 
 			const isMultiTime = !!(note.reminderStartTimes && note.reminderStartTimes.length > 0);
 			if (!isMultiTime) {
@@ -1078,14 +1164,14 @@ export default class QuickNotesBoardPlugin extends Plugin {
 				void this.saveNotes();
 			}
 
-			// Notifica persistente (non sparisce da sola) + suono in loop: entrambi si
-			// fermano solo cliccando la notifica stessa o l'icona allarme della nota.
+			// Finestra di dialogo (non si chiude da sola) + suono in loop: entrambi si
+			// fermano solo con "Ferma"/"Posticipa" nella finestra o dall'icona allarme della nota.
 			// Conta l'esecuzione: l'allarme sta effettivamente scattando ora.
 			note.reminderFireCount = (note.reminderFireCount || 0) + 1;
 			void this.saveNotes();
 
-			const notice = new Notice(this.tr("notice.dueReminder", { title: note.title }), 0);
-			notice.messageEl.addEventListener("click", () => this.stopDueAlarm(note.id));
+			this.dismissDueDialog(note.id); // mai due finestre aperte per la stessa nota
+			this.showDueReminderDialog(note);
 			this.playDueAlarmLoop(note.id);
 			this.focusDueNoteInOpenViews(note.id);
 		}
@@ -1103,7 +1189,7 @@ export default class QuickNotesBoardPlugin extends Plugin {
 	/** Avvia il suono di allarme in loop per una nota, tracciandolo per poterlo fermare
 	 * più avanti (click sulla notifica o sull'icona allarme della nota). */
 	private playDueAlarmLoop(noteId: string) {
-		this.stopDueAlarm(noteId);
+		this.silenceDueSound(noteId);
 		const resourcePath = this.getSoundResourcePath("note-due-reminder");
 		if (!resourcePath) return;
 		try {
@@ -1122,12 +1208,34 @@ export default class QuickNotesBoardPlugin extends Plugin {
 	 * passati fino ad ora: così non risuona subito per lo stesso slot, solo al prossimo
 	 * orario della lista (anche se più di uno era rimasto in sospeso insieme). */
 	stopDueAlarm(noteId: string) {
+		// La finestra si chiude comunque, anche se il suono non era in corso: fermare
+		// l'allarme dall'icona della nota non deve lasciarla aperta.
+		this.dismissDueDialog(noteId);
+		if (!this.silenceDueSound(noteId)) return;
+		this.resolvePassedSlotsToday(noteId);
+	}
+
+	/** Ferma solo il suono in loop. Ritorna true se era effettivamente in corso. */
+	private silenceDueSound(noteId: string): boolean {
 		const audio = this.activeDueAlarms.get(noteId);
-		if (!audio) return;
+		if (!audio) return false;
 		audio.pause();
 		audio.currentTime = 0;
 		this.activeDueAlarms.delete(noteId);
+		return true;
+	}
 
+	/** Chiude la finestra dell'allarme di una nota, se aperta, senza che valga come "Ferma". */
+	private dismissDueDialog(noteId: string) {
+		const dialog = this.activeDueDialogs.get(noteId);
+		if (!dialog) return;
+		this.activeDueDialogs.delete(noteId);
+		dialog.closeQuietly();
+	}
+
+	/** Per le note con più orari nello stesso giorno: segna come risolti gli orari di oggi
+	 * già passati, così non risuonano subito per lo stesso slot. */
+	private resolvePassedSlotsToday(noteId: string) {
 		const note = this.notes.find((n) => n.id === noteId);
 		if (note?.reminderStartTimes && note.reminderStartTimes.length > 0) {
 			const resolved = this.getResolvedSlotsForToday(note);
@@ -1136,6 +1244,102 @@ export default class QuickNotesBoardPlugin extends Plugin {
 				if (t <= nowHHMM) resolved.add(t);
 			}
 		}
+	}
+
+	/** Apre la finestra di dialogo dell'allarme in corso: nome della nota, scelta della
+	 * durata, "Posticipa" e "Ferma" — più "Posticipa alla prossima programmazione" se
+	 * l'allarme si ripete. Chiuderla in altro modo (X, Esc) equivale a "Ferma". */
+	private showDueReminderDialog(note: QuickNote) {
+		const dialog = new AlarmRingModal(this.app, this, note, {
+			onSnooze: (minutes) => void this.snoozeAlarm(note.id, minutes),
+			onStop: () => this.stopDueAlarm(note.id),
+			onPostponeToNext: () => this.postponeAlarmToNextSchedule(note.id),
+		});
+		this.activeDueDialogs.set(note.id, dialog);
+		dialog.open();
+	}
+
+	/** "Posticipa alla prossima programmazione": stessa azione del pulsante omonimo nel
+	 * pannello principale della nota (Salva/Rimuovi), richiamabile anche dalla finestra
+	 * dell'allarme in corso. Solo per allarmi con una ripetizione attiva. */
+	async postponeAlarmToNextSchedule(noteId: string) {
+		const note = this.notes.find((n) => n.id === noteId);
+		if (!note || !note.dueDate || !note.reminderRepeat) return;
+		const next = addRepeatInterval(
+			note.dueDate,
+			note.reminderStartDate || note.dueDate,
+			note.reminderRepeat,
+			note.reminderRepeatEvery || 1
+		);
+		note.dueDate = next.dueDate;
+		note.reminderStartDate = next.reminderStartDate;
+		note.reminderSnoozeUntil = undefined;
+		this.stopDueAlarm(noteId);
+		await this.saveNotes();
+		this.refreshDueBordersInOpenViews();
+		new Notice(this.tr("modal.dueDate.postponed", { date: next.dueDate }));
+	}
+
+	/** Porta l'allarme al giorno utile successivo (rispettando "salta sabato e domenica"),
+	 * mantenendo la distanza tra inizio avviso e scadenza e lo stesso orario. */
+	private advanceAlarmOneDay(note: QuickNote) {
+		if (!note.dueDate) return;
+		let due = note.dueDate;
+		let start = note.reminderStartDate || note.dueDate;
+		for (let i = 0; i < 3; i++) {
+			const next = addRepeatInterval(due, start, "daily", 1);
+			due = next.dueDate;
+			start = next.reminderStartDate;
+			if (!note.skipWeekends) break;
+			const dow = new Date(`${due}T00:00:00`).getDay();
+			if (dow !== 0 && dow !== 6) break;
+		}
+		note.dueDate = due;
+		if (note.reminderStartDate) note.reminderStartDate = start;
+		this.resolvedAlarmSlots.delete(note.id);
+	}
+
+	/** Posticipo rapido: mette in pausa l'allarme di una nota per un numero di minuti a
+	 * scelta. Suono e notifica si fermano subito; per le note con più orari lo slot NON
+	 * viene segnato come risolto, così alla scadenza suona di nuovo. Se il posticipo
+	 * supera la mezzanotte e la finestra dell'allarme non arriva a domani, l'allarme
+	 * passa al prossimo giorno utile (altrimenti non suonerebbe mai più). */
+	async snoozeAlarm(noteId: string, minutes: number) {
+		const note = this.notes.find((n) => n.id === noteId);
+		if (!note || !note.dueDate) return;
+		const wanted = normalizeSnoozeMinutes(minutes);
+
+		this.silenceDueSound(noteId);
+		this.dismissDueDialog(noteId);
+
+		const { untilMs, crossesMidnight } = computeSnooze(Date.now(), wanted);
+		const isMultiTime = !!(note.reminderStartTimes && note.reminderStartTimes.length > 0);
+		const windowEndsToday = note.dueDate <= this.getTodayDateStr();
+		let message: string;
+
+		if (crossesMidnight && (windowEndsToday || isMultiTime)) {
+			if (windowEndsToday) {
+				this.advanceAlarmOneDay(note);
+			} else {
+				// Più orari con un intervallo di giorni: quelli di domani suonano comunque.
+				this.resolvePassedSlotsToday(noteId);
+			}
+			note.reminderSnoozeUntil = undefined;
+			message = this.tr("notice.snoozedNextDay", { title: note.title });
+		} else {
+			note.reminderSnoozeUntil = untilMs;
+			// Allo scadere deve suonare subito, senza aspettare l'intervallo di ripetizione.
+			this.dueReminderLastFired.delete(noteId);
+			message = this.tr("notice.snoozed", { title: note.title, time: formatClock(untilMs) });
+		}
+
+		if (this.settings.lastSnoozeMinutes !== wanted) {
+			this.settings.lastSnoozeMinutes = wanted;
+			await this.saveSettings();
+		}
+		await this.saveNotes();
+		this.refreshDueBordersInOpenViews();
+		new Notice(message);
 	}
 
 	/** Se una vista della board è aperta, porta la nota in primo piano ed evidenziata. */
@@ -1443,6 +1647,7 @@ export default class QuickNotesBoardPlugin extends Plugin {
 				const remRepeatEveryStr = attrs.get("remrepeatevery");
 				const remSkipWeekendsStr = attrs.get("remskipwe");
 				const remCountStr = attrs.get("remcount");
+				const remSnoozeStr = attrs.get("remsnooze");
 				const labelsStr = attrs.get("labels");
 				i++;
 
@@ -1508,6 +1713,7 @@ export default class QuickNotesBoardPlugin extends Plugin {
 					reminderRepeatEvery: remRepeatEveryStr ? parseInt(remRepeatEveryStr, 10) || undefined : undefined,
 					skipWeekends: remSkipWeekendsStr === "1" ? true : undefined,
 					reminderFireCount: remCountStr ? parseInt(remCountStr, 10) || undefined : undefined,
+					reminderSnoozeUntil: remSnoozeStr ? (parseInt(remSnoozeStr, 10) || 0) * 1000 || undefined : undefined,
 					labelIds: labelsStr ? labelsStr.split(",").filter((id) => id) : undefined,
 				});
 				continue;
@@ -1590,6 +1796,9 @@ export default class QuickNotesBoardPlugin extends Plugin {
 					}
 					if (note.skipWeekends) optionalAttrs.push("remskipwe=1");
 					if (note.reminderFireCount) optionalAttrs.push(`remcount=${note.reminderFireCount}`);
+					if (note.reminderSnoozeUntil && note.reminderSnoozeUntil > Date.now()) {
+						optionalAttrs.push(`remsnooze=${Math.round(note.reminderSnoozeUntil / 1000)}`);
+					}
 				}
 				if (note.labelIds && note.labelIds.length > 0) {
 					optionalAttrs.push(`labels=${note.labelIds.join(",")}`);
