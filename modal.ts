@@ -1510,6 +1510,32 @@ export function addRepeatInterval(
 	return { dueDate: formatDate(due), reminderStartDate: formatDate(newStart) };
 }
 
+/** Vero se la data (YYYY-MM-DD) cade di sabato o di domenica. */
+export function isWeekendDate(dateStr: string): boolean {
+	const dow = new Date(`${dateStr}T00:00:00`).getDay();
+	return dow === 0 || dow === 6;
+}
+
+/** Prossima programmazione di un allarme che si ripete. Se "salta sabato e domenica" è
+ * attivo e la data calcolata cade nel fine settimana, viene portata al lunedì
+ * successivo, mantenendo la stessa distanza tra inizio avviso e scadenza. */
+export function computeNextSchedule(
+	dueDate: string,
+	reminderStartDate: string,
+	repeat: "daily" | "weekly" | "monthly" | "yearly",
+	every: number,
+	skipWeekends: boolean
+): { dueDate: string; reminderStartDate: string } {
+	let next = addRepeatInterval(dueDate, reminderStartDate, repeat, every);
+	if (skipWeekends) {
+		let guard = 0;
+		while (guard++ < 2 && isWeekendDate(next.dueDate)) {
+			next = addRepeatInterval(next.dueDate, next.reminderStartDate, "daily", 1);
+		}
+	}
+	return next;
+}
+
 export class DueDateModal extends Modal {
 	private plugin: QuickNotesBoardPlugin;
 	private lang: QnbLang;
@@ -1686,21 +1712,12 @@ export class DueDateModal extends Modal {
 				.setDesc(this.tr("modal.dueDate.postponeDesc"))
 				.addButton((btn) =>
 					btn.setButtonText(this.tr("modal.dueDate.postponeButton")).onClick(async () => {
-						const next = addRepeatInterval(
-							this.note.dueDate!,
-							this.note.reminderStartDate || this.note.dueDate!,
-							this.note.reminderRepeat!,
-							this.note.reminderRepeatEvery || 1
-						);
-						this.note.dueDate = next.dueDate;
-						this.note.reminderStartDate = next.reminderStartDate;
-						this.note.reminderSnoozeUntil = undefined;
-						this.plugin.stopDueAlarm(this.note.id);
-						await this.plugin.saveNotes();
-						this.dueDate = next.dueDate;
-						this.remStartDate = next.reminderStartDate;
+						// Stessa identica azione della finestra dell'allarme in corso: un solo
+						// calcolo per entrambi, così rispettano allo stesso modo il fine settimana.
+						await this.plugin.postponeAlarmToNextSchedule(this.note.id);
+						this.dueDate = this.note.dueDate || "";
+						this.remStartDate = this.note.reminderStartDate || this.dueDate;
 						this.onSaved();
-						new Notice(this.tr("modal.dueDate.postponed", { date: next.dueDate }));
 						this.render();
 					})
 				);

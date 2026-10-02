@@ -1,5 +1,5 @@
 import { Plugin, WorkspaceLeaf, normalizePath, Notice } from "obsidian";
-import { MissedRemindersModal, AlarmRingModal, addRepeatInterval } from "./modal";
+import { MissedRemindersModal, AlarmRingModal, addRepeatInterval, computeNextSchedule, isWeekendDate } from "./modal";
 import { computeSnooze, formatClock, normalizeSnoozeMinutes } from "./snooze";
 import {
 	isHexColor,
@@ -1066,21 +1066,35 @@ export default class QuickNotesBoardPlugin extends Plugin {
 		const todayStr = this.getTodayDateStr();
 		const nowHHMM = this.getCurrentHHMM();
 		const missedDays: { date: string; times: string[] }[] = [];
-		let cursor = note.dueDate || todayStr;
+		const originalDate = note.dueDate || todayStr;
+		let cursor = originalDate;
 		let guard = 0; // paracadute anti-loop-infinito: non dovrebbe mai servire
 		while (guard++ < 3650 && cursor <= todayStr) {
 			const isToday = cursor === todayStr;
 			const allPassedThatDay = isToday ? reminderStartTimes.every((t) => t < nowHHMM) : true;
 			if (!allPassedThatDay) break; // oggi, con almeno un orario ancora futuro: fermati qui
-			missedDays.push({ date: cursor, times: [...reminderStartTimes] });
+			// Con "salta sabato e domenica" il fine settimana non è un giorno perso: in quei
+			// giorni l'allarme non doveva suonare.
+			if (!(note.skipWeekends && isWeekendDate(cursor))) {
+				missedDays.push({ date: cursor, times: [...reminderStartTimes] });
+			}
 			cursor = addRepeatInterval(cursor, cursor, "daily", 1).dueDate;
 		}
-		if (missedDays.length === 0) return false;
+		// Il nuovo giorno programmato non cade mai nel fine settimana se il toggle è attivo.
+		// Solo se la data va comunque ricalcolata (è avanzata, o è oggi): una data futura
+		// scelta dall'utente non si tocca.
+		if (note.skipWeekends && (cursor !== originalDate || cursor === todayStr)) {
+			let wg = 0;
+			while (wg++ < 2 && isWeekendDate(cursor)) {
+				cursor = addRepeatInterval(cursor, cursor, "daily", 1).dueDate;
+			}
+		}
+		if (cursor === originalDate) return false;
 
 		note.dueDate = cursor;
 		if (note.reminderStartDate) note.reminderStartDate = cursor;
 		void this.saveNotes();
-		this.queueMissedAlarmNotice(note.title, missedDays, cursor);
+		if (missedDays.length > 0) this.queueMissedAlarmNotice(note.title, missedDays, cursor);
 		// La nota ora è programmata su un altro giorno: l'eventuale cache di oggi non è
 		// più valida (verrà ricreata da zero alla prossima chiamata di
 		// getResolvedSlotsForToday, quando servirà davvero).
@@ -1265,11 +1279,12 @@ export default class QuickNotesBoardPlugin extends Plugin {
 	async postponeAlarmToNextSchedule(noteId: string) {
 		const note = this.notes.find((n) => n.id === noteId);
 		if (!note || !note.dueDate || !note.reminderRepeat) return;
-		const next = addRepeatInterval(
+		const next = computeNextSchedule(
 			note.dueDate,
 			note.reminderStartDate || note.dueDate,
 			note.reminderRepeat,
-			note.reminderRepeatEvery || 1
+			note.reminderRepeatEvery || 1,
+			!!note.skipWeekends
 		);
 		note.dueDate = next.dueDate;
 		note.reminderStartDate = next.reminderStartDate;
