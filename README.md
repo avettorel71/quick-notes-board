@@ -29,19 +29,21 @@ Customizable **sounds** for dozens of actions and smooth **window animations** r
 9. [Labels](#labels)
 10. [Board Activity](#board-activity)
 11. [Alarms and reminders](#alarms-and-reminders)
-12. [Note Explorer](#note-explorer)
-13. [Board Structure diagram](#board-structure-diagram)
-14. [Trash](#trash)
-15. [Archive](#archive)
-16. [Password lock (encryption)](#password-lock-encryption)
-17. [Board appearance](#board-appearance)
-18. [Data file compression](#data-file-compression)
-19. [Sound effects](#sound-effects)
-20. [Language](#language)
-21. [Data file format](#data-file-format)
-22. [Screenshots](#screenshots)
-23. [Version history](#version-history)
-24. [Development](#development)
+12. [Note widgets](#note-widgets)
+13. [Note Explorer](#note-explorer)
+14. [Board Structure diagram](#board-structure-diagram)
+15. [Trash](#trash)
+16. [Archive](#archive)
+17. [Password lock (encryption)](#password-lock-encryption)
+18. [Board appearance](#board-appearance)
+19. [Data file compression](#data-file-compression)
+20. [Sound effects](#sound-effects)
+21. [Language](#language)
+22. [What's new after an update](#whats-new-after-an-update)
+23. [Data file format](#data-file-format)
+24. [Screenshots](#screenshots)
+25. [Version history](#version-history)
+26. [Development](#development)
 
 ---
 
@@ -102,7 +104,7 @@ If you've defined any [labels](#labels), a second row appears below the category
 Each note is a small draggable card with:
 
 - A **colored header**, matching its category, with the category's icon (if any) and the note's title.
-- A **text body** in Markdown, previewed exactly like a real Obsidian note.
+- A **text body** in Markdown, previewed exactly like a real Obsidian note — or a live [widget](#note-widgets) (clock, calendar, countdown, stopwatch, pomodoro) in its place.
 - A row of action icons — fully reorderable and individually hideable, see [Customizing note action icons](#customizing-note-action-icons). The default order:
 
 | Icon | Action |
@@ -240,7 +242,182 @@ Set from the alarm clock icon on a note. The panel lets you configure:
 
 **Repetitions counter**: every time an alarm actually fires (notification and sound start), the note's counter goes up by one — including re-rings after the configured interval, and each individual time of a multi-time day. Alarms missed while Obsidian was closed are not counted, since they never rang. The counter is kept when you postpone to the next alarm or edit the alarm, and is reset only when you remove the alarm from the note.
 
-**Alarm list**: the toolbar's "Alarms" button shows every note with an alarm set, grouped by category/group/subgroup, with its due date, time(s), a live "time remaining" countdown (days/hours/minutes, or "Overdue"), and a **Repetitions** column showing how many times that alarm has actually rung so far. Clicking a row opens that note's alarm panel directly.
+**Last time it rang**: the **Last alarm** column of the alarm list, right after Repetitions, shows the date and time the alarm last fired (or a dash if it never has), so you can always tell whether a given time rang or not. Like the counter, it is saved with the note and reset only when you remove the alarm.
+
+**Skipped times notice**: if Obsidian was not running when a time of today's alarm came due (for example you open Obsidian at 10:00 and the 07:30 time has already passed), that time still does not ring late — but the next time you open the board, the "Missed reminders" window lists it, so a skipped time never goes unnoticed. A time that already rang before a restart is not reported, and neither is an alarm you set today for a time that has already passed.
+
+**Alarm list**: the toolbar's "Alarms" button shows every note with an alarm set, grouped by category/group/subgroup, with its due date, time(s), a live "time remaining" countdown (days/hours/minutes, or "Overdue"), and a **Repetitions** column showing how many times that alarm has actually rung so far and a **Last alarm** column with the date and time it last rang. Clicking a row opens that note's alarm panel directly.
+
+---
+
+## Note widgets
+
+A **widget** is a note that, instead of text, shows a small **live tool**: a clock, a calendar, a countdown, a stopwatch or a pomodoro timer. Widgets are meant as mini, self-contained utilities that help you keep an eye on things right from the board, working in the background while you do something else.
+
+There are five widgets: [Clock](#clock), [Calendar](#calendar), [Countdown](#countdown), [Stopwatch](#stopwatch) and [Pomodoro](#pomodoro).
+
+![Note widgets screenshot](Screenshot07.jpg)
+
+### Creating a widget
+
+**From the New note window**: right under the title there is a **Widget** toggle. Turn it on and a dropdown appears to choose the widget type. Press **Create**: the note is created with the widget already written and ready to use, with default values (stopwatch and pomodoro also get their own `id`, see below). If you leave the title empty, the note takes the widget's name.
+
+**By hand**: a widget is just a fenced code block, with `QNBWidget` as its language, inside any note. Each line is an option written as `name: value`; the only required one is `type`:
+
+````
+```QNBWidget
+type: clock
+```
+````
+
+To change a widget, open the note for editing: you'll see this text, and you can change any option. When you leave editing, the widget is drawn again with the new options.
+
+### Rules that apply to every widget
+
+- **Options**: one per line, as `name: value`. Names are not case sensitive. Blank lines are ignored, and so are lines starting with `#`, which you can use for comments. Every option except `type` is optional: whatever you leave out takes its default value.
+- **Mistakes are explained**: if the type doesn't exist, or an option has an invalid value (a wrong date, an unknown time zone), the widget shows a short message in red saying what is wrong and how to write it, instead of failing silently.
+- **Several widgets in one note**, mixed with normal text, are fine: just write one block after the other.
+- **Clicking**: the buttons inside a widget (Start, Pause, the calendar arrows...) work without opening the note for editing, even if you chose to require a double click to edit. Clicking anywhere else on the widget works as on any other note.
+- **Language**: button labels, month and day names and messages follow the plugin's language. Dates use the form "Monday, October 05, 2026".
+- **Accent lines**: the Clock, Countdown, Stopwatch and Pomodoro widgets have a line above and below them, for a cleaner, more distinctive look (the Calendar has none). By default it is light blue and 3 pixels thick. In **Settings**, the **Widget accent lines** toggle (on by default) turns it on or off, and when it is on you can also choose the **line color** and the **line thickness**, from 1 to 8 pixels. Open boards update right away, while a widget shown in a regular Obsidian note picks up the change the next time it is drawn.
+- **Light on resources**: a single shared timer updates every widget that is on screen. A widget that is not displayed (a closed or hidden note) costs nothing.
+- **Also outside the board**: while the plugin is enabled, a `QNBWidget` block is also drawn in your regular Obsidian notes.
+
+### Clock
+
+Time and date, updated in real time.
+
+````
+```QNBWidget
+type: clock
+seconds: true
+hour12: false
+date: true
+timezone: Europe/Rome
+label: Rome
+```
+````
+
+| Option | Values | Default | What it does |
+|---|---|---|---|
+| `seconds` | `true` / `false` | `true` | Shows or hides the seconds. |
+| `hour12` | `true` / `false` | `false` | `true` for the 12-hour format with AM/PM, `false` for 24 hours. |
+| `date` | `true` / `false` | `true` | Shows or hides the date line under the time. |
+| `timezone` | a time zone name, such as `Europe/Rome`, `America/New_York`, `Asia/Tokyo` | your computer's | Shows the time of another city. The zone name is shown under the date. |
+| `label` | any text | none | A title above the clock, handy to tell several clocks apart. |
+
+To see the time in several cities, put several clock blocks in the same note, each with its own `timezone` and `label`.
+
+### Calendar
+
+A month calendar with today highlighted.
+
+````
+```QNBWidget
+type: calendar
+weekstart: monday
+month: 2026-10
+```
+````
+
+| Option | Values | Default | What it does |
+|---|---|---|---|
+| `weekstart` | `monday` / `sunday` | `monday` | The first day of the week. |
+| `month` | `YYYY-MM`, such as `2026-10` | the current month | The month shown when the widget is drawn. |
+
+- It always shows six weeks, so the widget keeps the same height from one month to the next; the days of the neighboring months are dimmed, and weekends are slightly softer.
+- **Today** is highlighted, and the highlight moves on by itself at midnight.
+- The **‹** and **›** buttons go to the previous and next month. **Clicking the month name** brings you back to the current month. Navigation is not saved: when the note is drawn again, the calendar shows the month set in the block (or the current one).
+
+### Countdown
+
+Days, hours, minutes and seconds left to a date.
+
+````
+```QNBWidget
+type: countdown
+label: Christmas
+target: 2026-12-25 18:00
+done: Merry Christmas!
+seconds: true
+```
+````
+
+| Option | Values | Default | What it does |
+|---|---|---|---|
+| `target` | `YYYY-MM-DD` or `YYYY-MM-DD HH:MM` (also `HH:MM:SS`), local time | required | The moment to count down to. With the date only, the countdown ends at the start (00:00) of that day. |
+| `label` | any text | none | A title above the numbers. |
+| `done` | any text | "Expired" | What is shown once the date has passed. |
+| `seconds` | `true` / `false` | `true` | Shows or hides the seconds box. |
+
+- Under the numbers, the target date (and time) is shown in full.
+- Labels agree with the numbers ("1 day", "2 days").
+- The calculation uses the real clock, so it is always exact, even if Obsidian was closed for a while. A date that has already passed shows the `done` message right away.
+
+### Stopwatch
+
+A stopwatch with laps, that keeps counting even if you close the board.
+
+````
+```QNBWidget
+type: stopwatch
+id: work
+laps: true
+label: Report
+```
+````
+
+| Option | Values | Default | What it does |
+|---|---|---|---|
+| `id` | a short name, without spaces | none | Gives the stopwatch a name under which its state is saved (see below). |
+| `laps` | `true` / `false` | `true` | Shows the **Lap** button and the list of laps. |
+| `label` | any text | none | A title above the time. |
+
+- **Buttons**: **Start**, which becomes **Pause** while running and **Resume** after a pause; **Lap**, active only while running; **Reset**, which brings everything back to zero.
+- **Display**: `MM:SS.d` (with tenths of a second), or `H:MM:SS.d` after one hour.
+- **Laps**: the last five are listed, newest first, each with its number, the time of that single lap and the total time. The widget keeps up to 100 laps.
+- **The state is saved**: with an `id`, a running stopwatch keeps counting even if you close the board or Obsidian, because it counts from the moment it started, not with a counter. When you come back, the elapsed time is right. The state is saved only when you press a button.
+- **Without an `id`**, the state is kept only while Obsidian stays open, and two identical blocks share it. Give every stopwatch its own `id`. A note created from the New note window already has a random one. **If you duplicate a note, the copy keeps the same `id`, and so shares the same stopwatch: change it by hand** to make it independent.
+
+### Pomodoro
+
+A timer for the Pomodoro technique: work periods and breaks, with a notification when each one ends.
+
+````
+```QNBWidget
+type: pomodoro
+id: study
+work: 25
+break: 5
+longbreak: 15
+cycles: 4
+label: Study
+```
+````
+
+| Option | Values | Default | What it does |
+|---|---|---|---|
+| `id` | a short name, without spaces | none | The name under which its state is saved (see below). |
+| `work` | minutes, 1 to 600 | `25` | Length of a work period. |
+| `break` | minutes, 1 to 600 | `5` | Length of a short break. |
+| `longbreak` | minutes, 1 to 600 | `15` | Length of the long break. |
+| `cycles` | 1 to 12 | `4` | How many work periods before the long break. |
+| `label` | any text | none | A title above the timer; it is also shown in the end-of-phase notification. |
+
+- **How it goes**: work, then a short break, then work again, and so on. After `cycles` completed work periods comes the long break, and the count starts over.
+- **Display**: the name of the phase (Work, Break, Long break, each in its own color), the time left as `MM:SS`, a progress bar, a row of dots showing the work periods completed in the current round (all filled during the long break), and the total number of pomodoros completed.
+- **Buttons**: **Start**, which becomes **Pause** while running and **Resume** after a pause; **Reset**, which goes back to the beginning of the first work period and clears the counters; **Skip phase**, which moves on to the next phase without counting a skipped work period as completed.
+- **When a phase ends**, the timer stops and waits: a **notification** appears and stays on screen until you close it, and a **sound** plays once. Then you press **Start** for the next phase.
+- **Even with the board closed**: the end of a phase is announced as long as Obsidian is open, wherever you are in it. If Obsidian was closed when the phase ended, the notification appears the next time you open it, with the time the phase ended.
+- **Your own sound**: in **Settings → Sound effects**, in the **Widgets** group, choose a sound for **Pomodoro phase end**. As for every other sound, copy your audio file (mp3, wav, ogg or m4a) into the plugin's folder (`.obsidian/plugins/quick-notes-board/`), press **Refresh** if Obsidian is already open, pick the file from the dropdown, and use the **Play** button to hear it. Left empty, the pomodoro plays the alarm sound (the one of **Alarm notification**), so it never ends in silence unless you also leave that one empty.
+- **Changing the durations** in the block: if the current phase has not started yet, it takes the new length immediately; if it is under way, the new lengths apply from the next phase.
+- **The state is saved**: with an `id`, the timer survives closing the board and closing Obsidian (a running phase ends at its exact time). The state is saved only when you press a button or a phase ends.
+- **Without an `id`**, the state is kept only while Obsidian stays open, and two identical blocks share it. As for the stopwatch, give each pomodoro its own `id`, and change it by hand in a duplicated note.
+
+### Good to know
+
+- The state of stopwatches and pomodoros with an `id` is saved in the plugin's `data.json`. Deleting a widget note leaves its small saved state behind, which is harmless.
+- Widgets never use the internet.
 
 ---
 
@@ -333,6 +510,7 @@ The plugin can play a customizable sound for **dozens of distinct events**, orga
 - **Window openings**: each of the plugin's dialog windows.
 - **Confirmation and trash/archive buttons**: create note, apply category, close appearance window, restore, delete permanently, empty trash, send to trash from archive.
 - **Alarms**: due-date reminder ringing, opening the due-date panel.
+- **Widgets**: the end of each [Pomodoro](#pomodoro) phase (**Pomodoro phase end**). If you leave it empty, the alarm sound plays instead.
 
 **How it works**: audio files (mp3, wav, ogg, m4a) must be copied manually into the plugin's folder (`.obsidian/plugins/quick-notes-board/`). Each row in the Sound effects section is a dropdown listing the files found there — no file picker, no automatic copying: several events can share the same file this way without duplicates. The "Refresh" button re-scans the folder if you add files while Obsidian is open.
 
@@ -342,11 +520,21 @@ The plugin can play a customizable sound for **dozens of distinct events**, orga
 
 The plugin's interface (buttons, labels, windows, messages) is available in **Italian** (default) and **English**, selectable from settings and applied immediately, no need to restart Obsidian. The data file's format and the names you assign yourself (categories, groups, labels, note titles) are never automatically translated: they always stay exactly as you wrote them.
 
+## What's new after an update
+
+When Quick Notes Board is updated to a new version, a window opens **once** with the news of that version — the same text you find in the [Version history](#version-history) below. The window lists the **whole version history**, newest first: the versions that are new to you are open at the top, the older ones are collapsed and expand with a click. If you skip several versions, all the ones you missed are open. It never appears on a fresh install, and never again for a version you have already seen.
+
+- **Turn it off**: in Settings, the **What's new after an update** toggle (on by default). With it off, no window opens after updates.
+- **Open it whenever you like**: the **Show what's new** button in Settings, right below the toggle, reopens the window with the version you have installed open.
+- **From the command palette**: **Quick Notes Board: Show what's new** does the same, and like any command you can assign it a keyboard shortcut.
+
+The news text is written in English, while the labels of the toggle, button and command follow the plugin's language.
+
 ---
 
 ## Data file format
 
-All active, trashed, and archived notes are saved in a single, human-readable file, `Quick notes board.md`, inside the plugin's folder — organized by category, with each note's position, size, and every other property (font, colors, encrypted state, group, labels, alarm settings, etc.) encoded in a `%% QNB ... %%` block next to its title and text. The file is designed to be easy to read, but it's best not to edit it by hand, to avoid breaking its structure.
+All active, trashed, and archived notes are saved in a single, human-readable file, `Quick notes board.md`, inside the plugin's folder — organized by category, with each note's position, size, and every other property (font, colors, encrypted state, group, labels, alarm settings, etc.) encoded in a `%% QNB ... %%` block next to its title and text. The file is designed to be easy to read, but it's best not to edit it by hand, to avoid breaking its structure. The state of [widgets](#note-widgets) that keep one (stopwatches and pomodoros with an `id`) is not in this file: it lives in the plugin's `data.json`, together with the settings.
 
 If [data compression](#data-file-compression) is enabled, the file instead starts with a `%% QNB-COMPRESSED v1 %%` marker followed by compressed, base64-encoded content — no longer human-readable directly, but still auto-detected correctly regardless of the current setting.
 
@@ -359,6 +547,21 @@ If [data compression](#data-file-compression) is enabled, the file instead start
 ---
 
 ## Version history
+
+### 1.1.0
+
+- New: **Note widgets** — small live tools inside a note. In the New note window, the **Widget** toggle (right under the title) shows a dropdown to choose the type, and the note is created ready to use. There are five widgets: **Clock** (time and date, in any time zone), **Calendar** (month view with month navigation), **Countdown** (days, hours, minutes and seconds to a date), **Stopwatch** (with laps) and **Pomodoro** (work and break cycles). A widget is written in the note as a `QNBWidget` code block with a few `option: value` lines, so you can also create or adjust them by hand. See the **Note widgets** section of the README for every option.
+  - Stopwatch and Pomodoro keep their state when they have an `id`, even if you close the board or Obsidian.
+  - At the end of each Pomodoro phase a notification appears and a sound plays, even with the board closed. You can choose your own sound in **Settings → Sound effects → Widgets → Pomodoro phase end**; left empty, the alarm sound plays.
+  - The buttons inside a widget never open the note for editing.
+  - Clock, Countdown, Stopwatch and Pomodoro have a light-blue accent line above and below them. In Settings, the **Widget accent lines** toggle (on by default) turns it off, and you can choose its color and its thickness (1 to 8 pixels).
+- New: **What's new window.** After Quick Notes Board is updated, a window opens once with the news of the new version (if you skip several versions, those of all of them open together). It never appears on a fresh install, and never again for the same version.
+  - The window lists the whole version history, newest first: the new versions are open, the older ones are collapsed — click a version to expand it.
+  - In Settings, the **What's new after an update** toggle (on by default) turns it off; the **Show what's new** button next to it reopens the window whenever you like, with the version you have installed open.
+  - The same action is available from the command palette as **Quick Notes Board: Show what's new**, so you can also give it a keyboard shortcut.
+  - The text is written in English.
+- New: the Alarms list has a new **Last alarm** column, right after Repetitions, showing the **date and time each alarm last rang**. It is saved with the note and reset only when you remove the alarm.
+- New: **skipped alarm times are now reported.** If Obsidian was not running when a time of today's alarm came due, the time is skipped as before, but the "Missed reminders" window now lists it the next time you open the board, instead of leaving you wondering whether it rang.
 
 ### 1.0.9
 
@@ -465,6 +668,8 @@ Automatically rebuilds on every change to the source files (`main.ts`, `view.ts`
 | `settings.ts` | The settings panel. |
 | `modal.ts` | The dialog windows (new note, change category, text appearance, lock/unlock, trash, archive, alarm list, note explorer, board structure, due-date panel, label assignment, and more). |
 | `crypto.ts` | Encryption/decryption of note content. |
+| `changelog.ts` | The news shown in the "What's new" window after an update, and the logic deciding which versions to show (no dependency on Obsidian). |
+| `widgets.ts` | The note widgets: option parsing, the five widgets, their saved state and the shared timer (no dependency on Obsidian). |
 | `snooze.ts` | The quick-snooze durations and the deadline calculation (no dependency on Obsidian). |
 | `gradient.ts` | The category background-gradient directions, color validation and CSS generation (no dependency on Obsidian). |
 | `i18n.ts` | Translation dictionaries (IT/EN) and the translation function. |

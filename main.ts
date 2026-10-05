@@ -1,5 +1,8 @@
 import { Plugin, WorkspaceLeaf, normalizePath, Notice } from "obsidian";
-import { MissedRemindersModal, AlarmRingModal, addRepeatInterval, computeNextSchedule, isWeekendDate } from "./modal";
+import { MissedRemindersModal, AlarmRingModal, WhatsNewModal, addRepeatInterval, computeNextSchedule, isWeekendDate } from "./modal";
+import { currentChangelog, pendingChangelog } from "./changelog";
+import { WidgetManager, WIDGET_BLOCK_NAME } from "./widgets";
+import type { PomodoroPhase } from "./widgets";
 import { computeSnooze, formatClock, normalizeSnoozeMinutes } from "./snooze";
 import {
 	isHexColor,
@@ -175,6 +178,9 @@ export interface QuickNote {
 	/** Quante volte l'allarme è effettivamente scattato (notifica + suono). Assente = 0.
 	 * Si azzera solo rimuovendo l'allarme dalla nota. */
 	reminderFireCount?: number;
+	/** Istante (ms) dell'ultima volta che l'allarme è effettivamente scattato. Assente = mai.
+	 * Come il contatore, si azzera solo rimuovendo l'allarme dalla nota. */
+	reminderLastFired?: number;
 	/** Istante (ms) fino al quale l'allarme è in pausa dopo un "posticipo rapido". Finché è
 	 * nel futuro, isNoteDueActive risponde falso (niente suono, bordo o notifica); allo
 	 * scadere l'allarme torna normale e il campo viene azzerato. Assente = nessun
@@ -322,6 +328,27 @@ export default class QuickNotesBoardPlugin extends Plugin {
 	/** Finestra di dialogo aperta per nota mentre l'allarme suona: serve a chiuderla anche
 	 * quando l'allarme viene fermato o posticipato da un'altra parte (icona della nota). */
 	private activeDueDialogs = new Map<string, AlarmRingModal>();
+	/** Vero se il file dati non esisteva ancora al caricamento: prima installazione. */
+	private freshInstall = false;
+	/** Note widget (blocco `QNBWidget`): disegno, timer condiviso e stato di cronometro e
+	 * pomodoro. Lo stato con `id` è salvato in data.json (chiave "widgetState"). */
+	widgets = new WidgetManager({
+		lang: () => this.settings.language,
+		accentLines: () => {
+			if (!this.settings.widgetAccentLines) return null;
+			// Valori non validi (file dati modificato a mano) tornano a quelli predefiniti.
+			const color = isHexColor(this.settings.widgetAccentLineColor) ? this.settings.widgetAccentLineColor : "#2ca1be";
+			const width = Math.min(8, Math.max(1, Math.round(Number(this.settings.widgetAccentLineWidth)) || 3));
+			return { color, width };
+		},
+		persist: () => void this.saveSettings(),
+		notifyPomodoro: (info) => this.notifyPomodoro(info),
+	});
+	/** Finché lo stato dei widget non è stato letto da disco non va mai scritto. */
+	private widgetStateLoaded = false;
+	/** Istante di caricamento del plugin: serve a distinguere gli orari saltati perché
+	 * Obsidian era chiuso da un allarme appena impostato per un orario già passato. */
+	private readonly loadedAtMs = Date.now();
 
 	tr(key: string, vars?: Record<string, string>): string {
 		return t(this.settings.language, key, vars);
@@ -333,6 +360,17 @@ export default class QuickNotesBoardPlugin extends Plugin {
 		await this.loadSettings();
 		await this.loadNotes();
 		await this.loadActivityLog();
+		await this.loadWidgetState();
+
+		// Note widget: il blocco ```QNBWidget è sostituito da un widget vivo. Registrato anche in
+		// minuscolo, nel caso Obsidian confronti il nome del linguaggio senza badare alle maiuscole.
+		for (const name of [WIDGET_BLOCK_NAME, WIDGET_BLOCK_NAME.toLowerCase()]) {
+			this.registerMarkdownCodeBlockProcessor(name, (source, el) => {
+				this.widgets.render(source, el);
+			});
+		}
+		// Un solo timer per tutti i widget, che chiude anche le fasi del pomodoro a board chiusa.
+		this.registerInterval(window.setInterval(() => this.widgets.tick(), 100));
 
 		this.registerView(
 			VIEW_TYPE_QNB,
@@ -351,6 +389,16 @@ export default class QuickNotesBoardPlugin extends Plugin {
 			callback: () => void this.activateView(),
 		});
 
+		this.addCommand({
+			id: "show-whats-new",
+			name: this.tr("command.whatsNew"),
+			callback: () => this.openWhatsNew(),
+		});
+
+		// Novità dopo un aggiornamento: a Obsidian completamente caricato, così la finestra
+		// non compare nel mezzo dell'avvio.
+		this.app.workspace.onLayoutReady(() => void this.maybeShowWhatsNew());
+
 		// Avvisi di scadenza: girano a livello di plugin (non della vista), così
 		// continuano a scattare anche a pannello board chiuso, finché Obsidian resta
 		// aperto. registerInterval lo ripulisce da solo alla disattivazione del plugin.
@@ -359,6 +407,25 @@ export default class QuickNotesBoardPlugin extends Plugin {
 		// allarme, invece di poter apparire con fino a mezzo minuto di scarto tra loro.
 		this.checkDueReminders();
 		this.registerInterval(window.setInterval(() => this.checkDueReminders(), 5000));
+	}
+
+	/** Dopo un aggiornamento apre, una sola volta, le novità delle versioni non ancora viste.
+	 * Alla prima installazione non mostra nulla. Con l'opzione spenta salta le novità ma
+	 * ricorda la versione, così riaccenderla non fa comparire vecchie versioni. */
+	private async maybeShowWhatsNew() {
+		const current = this.manifest.version;
+		const lastSeen = this.settings.lastSeenVersion;
+		if (lastSeen === current) return;
+		const entries =
+			this.freshInstall || !this.settings.showWhatsNew ? [] : pendingChangelog(lastSeen, current);
+		this.settings.lastSeenVersion = current;
+		await this.saveSettings();
+		if (entries.length > 0) new WhatsNewModal(this.app, this, entries.map((e) => e.version)).open();
+	}
+
+	/** Apre le novità con la versione installata già aperta (pulsante nelle impostazioni e comando). */
+	openWhatsNew() {
+		new WhatsNewModal(this.app, this, currentChangelog(this.manifest.version).map((e) => e.version)).open();
 	}
 
 	onunload() {
@@ -383,6 +450,7 @@ export default class QuickNotesBoardPlugin extends Plugin {
 
 	async loadSettings() {
 		const data = ((await this.loadData()) as QnbPluginDataFile | null) || {};
+		this.freshInstall = !data.settings;
 		const stored: Partial<QuickNotesBoardSettings> & {
 			deleteSoundFileName?: string;
 			minimizeSoundFileName?: string;
@@ -439,7 +507,29 @@ export default class QuickNotesBoardPlugin extends Plugin {
 		const data = ((await this.loadData()) as QnbPluginDataFile | null) || {};
 		data.settings = this.settings as unknown as Record<string, unknown>;
 		if (this.activityLogLoaded) data.activityLog = this.activityLog;
+		if (this.widgetStateLoaded) data.widgetState = this.widgets.store.toJSON();
 		await this.saveData(data);
+	}
+
+	private async loadWidgetState() {
+		const data = ((await this.loadData()) as QnbPluginDataFile | null) || {};
+		this.widgets.store.load(data.widgetState);
+		this.widgetStateLoaded = true;
+	}
+
+	/** Fine di una fase del pomodoro: avviso che resta finché non lo chiudi, più un suono
+	 * (una volta sola): quello scelto per "Fine fase Pomodoro" nelle impostazioni, o, se non
+	 * ne è stato scelto nessuno, quello dell'allarme. Funziona anche con la board chiusa. */
+	private notifyPomodoro(info: { label: string; ended: PomodoroPhase; next: PomodoroPhase; endedAt: number; late: boolean }) {
+		const key =
+			info.ended === "work"
+				? info.next === "longbreak" ? "widget.pomodoro.endWorkLong" : "widget.pomodoro.endWork"
+				: "widget.pomodoro.endBreak";
+		let message = this.tr(key);
+		if (info.label) message = `${info.label} — ${message}`;
+		if (info.late) message += ` ${this.tr("widget.pomodoro.lateAt", { time: formatClock(info.endedAt) })}`;
+		new Notice(message, 0);
+		this.playSound(this.settings.soundFiles["widget-pomodoro-end"] ? "widget-pomodoro-end" : "note-due-reminder");
 	}
 
 	/** Data locale (non UTC) di un timestamp, nel formato "YYYY-MM-DD". */
@@ -595,6 +685,24 @@ export default class QuickNotesBoardPlugin extends Plugin {
 
 	async setCollapseNoteIcons(enabled: boolean) {
 		this.settings.collapseNoteIcons = enabled;
+		await this.saveSettings();
+		this.refreshOpenViews();
+	}
+
+	async setWidgetAccentLines(enabled: boolean) {
+		this.settings.widgetAccentLines = enabled;
+		await this.saveSettings();
+		this.refreshOpenViews();
+	}
+
+	async setWidgetAccentLineColor(color: string) {
+		this.settings.widgetAccentLineColor = color;
+		await this.saveSettings();
+		this.refreshOpenViews();
+	}
+
+	async setWidgetAccentLineWidth(width: number) {
+		this.settings.widgetAccentLineWidth = width;
 		await this.saveSettings();
 		this.refreshOpenViews();
 	}
@@ -1011,8 +1119,9 @@ export default class QuickNotesBoardPlugin extends Plugin {
 	 * già strettamente passato in quel momento viene marcato subito come risolto, SENZA
 	 * far suonare nulla (altrimenti un riavvio a metà giornata farebbe squillare con ore
 	 * di ritardo una sveglia il cui orario previsto è già passato da tempo). Questi orari
-	 * "persi" vengono però messi in coda per un'unica notifica riepilogativa silenziosa
-	 * (vedi queueMissedAlarmNotice), così non spariscono senza lasciare traccia.
+	 * "persi", se non risultano già scattati (reminderLastFired) e il plugin è appena
+	 * partito, vengono messi in coda per la finestra dei promemoria mancati (vedi
+	 * queueSkippedTodayNotice), così non spariscono senza lasciare traccia.
 	 * Gli orari ancora futuri al momento del riavvio restano regolarmente in attesa e
 	 * scattano puntuali quando arrivano (compreso il caso limite di un riavvio nello
 	 * stesso identico minuto dell'orario previsto: `<`, non `<=`, per non "mangiarselo").
@@ -1043,12 +1152,43 @@ export default class QuickNotesBoardPlugin extends Plugin {
 		const fresh = { date: todayStr, times: new Set<string>() };
 		if (reminderStartTimes && reminderStartTimes.length > 0 && note.dueDate === todayStr) {
 			const nowHHMM = this.getCurrentHHMM();
+			const skipped: string[] = [];
 			for (const t of reminderStartTimes) {
-				if (t < nowHHMM) fresh.times.add(t);
+				if (t >= nowHHMM) continue;
+				fresh.times.add(t);
+				if (!this.slotRangToday(note, todayStr, t)) skipped.push(t);
+			}
+			// Solo se il plugin è appena partito: un allarme impostato adesso per un orario
+			// già passato non è un orario "saltato perché Obsidian era chiuso".
+			const justStarted = Date.now() - this.loadedAtMs < 120000;
+			const weekendOff = !!note.skipWeekends && isWeekendDate(todayStr);
+			if (skipped.length > 0 && justStarted && !weekendOff) {
+				this.queueSkippedTodayNotice(note.title, todayStr, skipped);
 			}
 		}
 		this.resolvedAlarmSlots.set(noteId, fresh);
 		return fresh.times;
+	}
+
+	/** Vero se l'orario di oggi risulta già scattato: l'ultimo allarme registrato è dello
+	 * stesso orario o successivo. Evita di segnalare come saltato un orario che ha suonato
+	 * prima di un riavvio di Obsidian. */
+	private slotRangToday(note: QuickNote, todayStr: string, time: string): boolean {
+		const last = note.reminderLastFired;
+		if (!last) return false;
+		return last >= new Date(`${todayStr}T${time}:00`).getTime();
+	}
+
+	/** Mette in coda gli orari di OGGI saltati perché Obsidian non era in esecuzione. Se la
+	 * nota è già in coda per giorni interi recuperati e avanzati a oggi, si aggiunge a quella
+	 * voce. Non c'è nessuna nuova data: l'allarme resta programmato su oggi. */
+	private queueSkippedTodayNotice(title: string, date: string, times: string[]) {
+		const existing = this.pendingMissedAlarms.find((p) => p.title === title && p.newDate === date);
+		if (existing) {
+			existing.missedDays.push({ date, times });
+			return;
+		}
+		this.pendingMissedAlarms.push({ title, missedDays: [{ date, times }], newDate: "" });
 	}
 
 	/** Verifica una singola nota multi-orario per giorni/orari interi ormai scaduti (a
@@ -1182,6 +1322,7 @@ export default class QuickNotesBoardPlugin extends Plugin {
 			// fermano solo con "Ferma"/"Posticipa" nella finestra o dall'icona allarme della nota.
 			// Conta l'esecuzione: l'allarme sta effettivamente scattando ora.
 			note.reminderFireCount = (note.reminderFireCount || 0) + 1;
+			note.reminderLastFired = Date.now();
 			void this.saveNotes();
 
 			this.dismissDueDialog(note.id); // mai due finestre aperte per la stessa nota
@@ -1662,6 +1803,7 @@ export default class QuickNotesBoardPlugin extends Plugin {
 				const remRepeatEveryStr = attrs.get("remrepeatevery");
 				const remSkipWeekendsStr = attrs.get("remskipwe");
 				const remCountStr = attrs.get("remcount");
+				const remLastStr = attrs.get("remlast");
 				const remSnoozeStr = attrs.get("remsnooze");
 				const labelsStr = attrs.get("labels");
 				i++;
@@ -1728,6 +1870,7 @@ export default class QuickNotesBoardPlugin extends Plugin {
 					reminderRepeatEvery: remRepeatEveryStr ? parseInt(remRepeatEveryStr, 10) || undefined : undefined,
 					skipWeekends: remSkipWeekendsStr === "1" ? true : undefined,
 					reminderFireCount: remCountStr ? parseInt(remCountStr, 10) || undefined : undefined,
+					reminderLastFired: remLastStr ? (parseInt(remLastStr, 10) || 0) * 1000 || undefined : undefined,
 					reminderSnoozeUntil: remSnoozeStr ? (parseInt(remSnoozeStr, 10) || 0) * 1000 || undefined : undefined,
 					labelIds: labelsStr ? labelsStr.split(",").filter((id) => id) : undefined,
 				});
@@ -1811,6 +1954,7 @@ export default class QuickNotesBoardPlugin extends Plugin {
 					}
 					if (note.skipWeekends) optionalAttrs.push("remskipwe=1");
 					if (note.reminderFireCount) optionalAttrs.push(`remcount=${note.reminderFireCount}`);
+					if (note.reminderLastFired) optionalAttrs.push(`remlast=${Math.round(note.reminderLastFired / 1000)}`);
 					if (note.reminderSnoozeUntil && note.reminderSnoozeUntil > Date.now()) {
 						optionalAttrs.push(`remsnooze=${Math.round(note.reminderSnoozeUntil / 1000)}`);
 					}

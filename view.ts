@@ -926,7 +926,7 @@ export class QuickNotesBoardView extends ItemView {
 	}
 
 	private openNewNoteModal() {
-		new NewNoteModal(this.app, this.plugin, this.plugin.settings.categories, (title, category, groupId) => {
+		new NewNoteModal(this.app, this.plugin, this.plugin.settings.categories, (title, category, groupId, content) => {
 			void (async () => {
 			const offset = (this.plugin.notes.length % 8) * 24;
 			const note: QuickNote = {
@@ -934,7 +934,7 @@ export class QuickNotesBoardView extends ItemView {
 				title: title || this.tr("view.note.untitled"),
 				category: category || "Generale",
 				groupId: groupId || "",
-				content: "",
+				content: content || "",
 				x: 40 + offset,
 				y: 40 + offset,
 				w: this.plugin.settings.defaultNoteWidth,
@@ -1002,6 +1002,7 @@ export class QuickNotesBoardView extends ItemView {
 		copy.modifiedAt = Date.now();
 		copy.reminderSnoozeUntil = undefined;
 		copy.reminderFireCount = undefined;
+		copy.reminderLastFired = undefined;
 		this.plugin.notes.push(copy);
 		await this.plugin.saveNotes();
 		this.refreshVisibilityButtons();
@@ -2462,6 +2463,21 @@ export class QuickNotesBoardView extends ItemView {
 		targetOffsetInNode: number,
 		state: { sawLine: boolean; blockquoteDepth: number; rawContent: string; rawPos: number }
 	): { raw: number; found: number | null } {
+		// Un widget è il disegno di un blocco ```QNBWidget ... ```: nel testo grezzo occupa
+		// tutto il blocco, non il testo che mostra (l'ora, i giorni...). Un clic sul widget
+		// porta il cursore all'inizio del blocco.
+		if (node.nodeType === Node.ELEMENT_NODE && (node as HTMLElement).classList.contains("qnb-widget")) {
+			// Il blocco si cerca nel testo grezzo a partire da qui (non si assume quante righe
+			// vuote lo precedano): la sua recinzione di apertura è il punto di partenza esatto.
+			const found = state.rawContent.slice(state.rawPos).search(/```qnbwidget/i);
+			const blockStart = found === -1 ? state.rawPos + (state.sawLine ? 1 : 0) : state.rawPos + found;
+			state.sawLine = true;
+			const rest = state.rawContent.slice(blockStart);
+			const close = rest.search(/\n```/);
+			const blockEnd = blockStart + (close === -1 ? rest.length : close + 4);
+			return { raw: blockEnd - state.rawPos, found: node.contains(targetNode) ? blockStart - state.rawPos : null };
+		}
+
 		if (node === targetNode) {
 			return { raw: 0, found: node.nodeType === Node.TEXT_NODE ? targetOffsetInNode : 0 };
 		}

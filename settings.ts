@@ -139,7 +139,8 @@ export type QnbSoundEventId =
 	| "archive-send-to-trash"
 	| "trash-restore"
 	| "trash-delete-forever"
-	| "trash-empty";
+	| "trash-empty"
+	| "widget-pomodoro-end";
 
 export const SOUND_EVENT_GROUPS: {
 	headingKey: string;
@@ -221,6 +222,10 @@ export const SOUND_EVENT_GROUPS: {
 			{ id: "trash-empty", labelKey: "settings.sounds.event.trashEmpty" },
 		],
 	},
+	{
+		headingKey: "settings.sounds.group.widgets",
+		events: [{ id: "widget-pomodoro-end", labelKey: "settings.sounds.event.widgetPomodoroEnd" }],
+	},
 ];
 
 /** Le 12 icone azione della nota che si possono riordinare/nascondere a piacere
@@ -264,6 +269,15 @@ export const DEFAULT_NOTE_ICON_ORDER: QnbNoteIconConfig[] = [
 
 export interface QuickNotesBoardSettings {
 	language: QnbLang;
+	/** Se true, dopo un aggiornamento si apre una volta la finestra con le novità. */
+	showWhatsNew: boolean;
+	/** Se true, i widget Orologio, Conto alla rovescia, Cronometro e Pomodoro hanno una linea azzurra sopra e sotto. */
+	widgetAccentLines: boolean;
+	/** Colore (hex) e spessore (pixel, da 1 a 8) di quelle linee. */
+	widgetAccentLineColor: string;
+	widgetAccentLineWidth: number;
+	/** Ultima versione del plugin per cui le novità sono già state mostrate (o saltate). */
+	lastSeenVersion: string;
 	fullscreenMode: boolean; // se true, apre la board a schermo intero chiudendo i pannelli laterali
 	collapseNoteIcons: boolean; // se true, le icone azione della nota si vedono solo al passaggio del mouse
 	/** Se true, la nota fa un piccolo "assestamento elastico" quando la rilasci dopo averla trascinata. */
@@ -345,6 +359,11 @@ export interface QuickNotesBoardSettings {
 
 export const DEFAULT_SETTINGS: QuickNotesBoardSettings = {
 	language: "it",
+	showWhatsNew: true,
+	widgetAccentLines: true,
+	widgetAccentLineColor: "#2ca1be",
+	widgetAccentLineWidth: 3,
+	lastSeenVersion: "",
 	fullscreenMode: false,
 	collapseNoteIcons: false,
 	dragSettleAnimation: false,
@@ -468,6 +487,29 @@ export class QuickNotesBoardSettingTab extends PluginSettingTab {
 				},
 			},
 			{
+				name: this.tr("settings.whatsNew.name"),
+				desc: this.tr("settings.whatsNew.desc"),
+				render: (setting: Setting) => {
+					setting.addToggle((toggle) =>
+						toggle.setValue(this.plugin.settings.showWhatsNew).onChange(async (value) => {
+							this.plugin.settings.showWhatsNew = value;
+							await this.plugin.saveSettings();
+						})
+					);
+				},
+			},
+			{
+				name: this.tr("settings.whatsNewShow.name"),
+				desc: this.tr("settings.whatsNewShow.desc"),
+				render: (setting: Setting) => {
+					setting.addButton((btn) =>
+						btn
+							.setButtonText(this.tr("settings.whatsNewShow.button"))
+							.onClick(() => this.plugin.openWhatsNew())
+					);
+				},
+			},
+			{
 				name: this.tr("settings.fullscreen.name"),
 				desc: this.tr("settings.fullscreen.desc"),
 				render: (setting: Setting) => {
@@ -572,6 +614,45 @@ export class QuickNotesBoardSettingTab extends PluginSettingTab {
 							.setValue(this.plugin.settings.hoverLiftDurationSeconds)
 							.onChange(async (value) => {
 								await this.plugin.setHoverLiftDurationSeconds(value);
+							})
+					);
+				},
+			},
+			{
+				name: this.tr("settings.widgetLines.name"),
+				desc: this.tr("settings.widgetLines.desc"),
+				render: (setting: Setting) => {
+					setting.addToggle((toggle) =>
+						toggle.setValue(this.plugin.settings.widgetAccentLines).onChange(async (value) => {
+							await this.plugin.setWidgetAccentLines(value);
+							this.refreshDomState();
+						})
+					);
+				},
+			},
+			{
+				name: this.tr("settings.widgetLines.colorLabel"),
+				visible: () => this.plugin.settings.widgetAccentLines,
+				render: (setting: Setting) => {
+					setting.addColorPicker((cp) =>
+						cp.setValue(this.plugin.settings.widgetAccentLineColor).onChange(async (value) => {
+							await this.plugin.setWidgetAccentLineColor(value);
+						})
+					);
+				},
+			},
+			{
+				name: this.tr("settings.widgetLines.widthLabel"),
+				desc: this.tr("settings.widgetLines.widthDesc"),
+				visible: () => this.plugin.settings.widgetAccentLines,
+				render: (setting: Setting) => {
+					setting.addSlider((slider) =>
+						slider
+							.setLimits(1, 8, 1)
+							.setValue(this.plugin.settings.widgetAccentLineWidth)
+							.setDynamicTooltip()
+							.onChange(async (value) => {
+								await this.plugin.setWidgetAccentLineWidth(value);
 							})
 					);
 				},

@@ -1,4 +1,7 @@
-import { App, Modal, Setting, ButtonComponent, ToggleComponent, setIcon, Notice } from "obsidian";
+import { App, Component, MarkdownRenderer, Modal, Setting, ButtonComponent, ToggleComponent, setIcon, Notice } from "obsidian";
+import { WIDGET_TYPES, widgetTemplate, widgetTypeName } from "./widgets";
+import type { WidgetType } from "./widgets";
+import { CHANGELOG } from "./changelog";
 import type { QnbCategory, QnbGroup } from "./settings";
 import type QuickNotesBoardPlugin from "./main";
 import type { QuickNote, QnbFontFamily } from "./main";
@@ -34,15 +37,19 @@ export class NewNoteModal extends Modal {
 	private title = "";
 	private category: string;
 	private groupId = "";
-	private onSubmit: (title: string, category: string, groupId: string) => void;
+	private onSubmit: (title: string, category: string, groupId: string, content: string) => void;
 	private categories: QnbCategory[];
 	private groupContainer: HTMLElement | null = null;
+	/** Nota creata come widget: tipo scelto e contenitore del menu a tendina. */
+	private widgetOn = false;
+	private widgetType: WidgetType = "clock";
+	private widgetContainer: HTMLElement | null = null;
 
 	constructor(
 		app: App,
 		plugin: QuickNotesBoardPlugin,
 		categories: QnbCategory[],
-		onSubmit: (title: string, category: string, groupId: string) => void
+		onSubmit: (title: string, category: string, groupId: string, content: string) => void
 	) {
 		super(app);
 		this.plugin = plugin;
@@ -74,6 +81,19 @@ export class NewNoteModal extends Modal {
 				}
 			});
 		});
+
+		// Widget: la nota nasce con un blocco QNBWidget al posto del testo.
+		new Setting(contentEl)
+			.setName(this.tr("modal.newNote.widget.name"))
+			.setDesc(this.tr("modal.newNote.widget.desc"))
+			.addToggle((toggle) =>
+				toggle.setValue(this.widgetOn).onChange((value) => {
+					this.widgetOn = value;
+					this.renderWidgetDropdown();
+				})
+			);
+		this.widgetContainer = contentEl.createDiv();
+		this.renderWidgetDropdown();
 
 		new Setting(contentEl).setName(this.tr("modal.newNote.categoryLabel")).addDropdown((dd) => {
 			for (const cat of this.categories) {
@@ -124,9 +144,29 @@ export class NewNoteModal extends Modal {
 		});
 	}
 
+	/** Il menu del tipo di widget compare solo con il toggle "Widget" attivo. */
+	private renderWidgetDropdown() {
+		if (!this.widgetContainer) return;
+		this.widgetContainer.empty();
+		if (!this.widgetOn) return;
+		new Setting(this.widgetContainer).setName(this.tr("modal.newNote.widget.type")).addDropdown((dd) => {
+			for (const type of WIDGET_TYPES) dd.addOption(type, widgetTypeName(this.lang, type));
+			dd.setValue(this.widgetType);
+			dd.onChange((value) => {
+				this.widgetType = value as WidgetType;
+			});
+		});
+	}
+
 	private submit() {
 		this.plugin.playSound("dialog-new-note-confirm");
-		this.onSubmit(this.title.trim(), this.category, this.groupId);
+		const title = this.title.trim();
+		if (this.widgetOn) {
+			// Senza titolo scritto, la nota prende il nome del widget.
+			this.onSubmit(title || widgetTypeName(this.lang, this.widgetType), this.category, this.groupId, widgetTemplate(this.widgetType, this.lang));
+		} else {
+			this.onSubmit(title, this.category, this.groupId, "");
+		}
 		this.close();
 	}
 
@@ -1770,6 +1810,7 @@ export class DueDateModal extends Modal {
 					this.note.reminderRepeatEvery = undefined;
 					this.note.skipWeekends = undefined;
 					this.note.reminderFireCount = undefined;
+					this.note.reminderLastFired = undefined;
 					this.note.reminderSnoozeUntil = undefined;
 					this.plugin.stopDueAlarm(this.note.id);
 					await this.plugin.saveNotes();
@@ -1840,6 +1881,7 @@ export class AlarmListModal extends Modal {
 		headerRow.createDiv({ text: this.tr("modal.alarmList.colTime") });
 		headerRow.createDiv({ text: this.tr("modal.alarmList.colRemaining") });
 		headerRow.createDiv({ text: this.tr("modal.alarmList.colRepetitions") });
+		headerRow.createDiv({ text: this.tr("modal.alarmList.colLastFired") });
 
 		for (const note of notes) {
 			const row = grid.createDiv({ cls: "qnb-alarm-grid-row qnb-alarm-grid-item" });
@@ -1887,6 +1929,15 @@ export class AlarmListModal extends Modal {
 					: formatTimeRemaining(note.dueDate || "", timeForCountdown, (key, vars) => this.tr(key, vars)),
 			});
 			row.createDiv({ text: String(note.reminderFireCount || 0) });
+
+			// Data e ora dell'ultima volta che l'allarme è scattato ("—" se mai).
+			let lastFiredText = "—";
+			if (note.reminderLastFired) {
+				const d = new Date(note.reminderLastFired);
+				const day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+				lastFiredText = `${day} ${formatClock(note.reminderLastFired)}`;
+			}
+			row.createDiv({ cls: "qnb-alarm-cell-nowrap", text: lastFiredText });
 		}
 
 		new Setting(contentEl).addButton((btn) =>
@@ -2445,9 +2496,13 @@ export class MissedRemindersModal extends Modal {
 					}),
 				});
 			}
+			// Senza nuova data l'allarme è rimasto su oggi: sono orari di oggi saltati perché
+			// Obsidian non era in esecuzione.
 			block.createEl("p", {
 				cls: "qnb-missed-reminders-advanced",
-				text: this.tr("modal.missedReminders.advancedTo", { date: item.newDate }),
+				text: item.newDate
+					? this.tr("modal.missedReminders.advancedTo", { date: item.newDate })
+					: this.tr("modal.missedReminders.skippedToday"),
 			});
 		}
 
@@ -2460,6 +2515,52 @@ export class MissedRemindersModal extends Modal {
 	}
 
 	onClose() {
+		this.contentEl.empty();
+	}
+}
+
+/** Finestra "What's new": elenca le novità (testo Markdown, solo in inglese) di tutte le
+ * versioni, dalla più recente. Quelle in `expanded` si vedono già aperte, le altre sono
+ * richiuse e si aprono con un clic. Si apre da sola una volta dopo un aggiornamento,
+ * oppure a richiesta. */
+export class WhatsNewModal extends Modal {
+	private plugin: QuickNotesBoardPlugin;
+	private expanded: Set<string>;
+	private renderer = new Component();
+
+	constructor(app: App, plugin: QuickNotesBoardPlugin, expanded: string[]) {
+		super(app);
+		this.plugin = plugin;
+		this.expanded = new Set(expanded);
+	}
+
+	private tr(key: string, vars?: Record<string, string>): string {
+		return t(this.plugin.settings.language, key, vars);
+	}
+
+	onOpen() {
+		const { contentEl } = this;
+		contentEl.empty();
+		this.titleEl.setText(this.tr("modal.whatsNew.title"));
+		this.renderer.load();
+
+		for (const entry of CHANGELOG) {
+			const block = contentEl.createEl("details");
+			block.open = this.expanded.has(entry.version);
+			block.createEl("summary").createEl("strong", { text: entry.version });
+			void MarkdownRenderer.render(this.app, entry.markdown, block.createDiv(), "", this.renderer);
+		}
+
+		new Setting(contentEl).addButton((btn) =>
+			btn
+				.setButtonText(this.tr("trash.close"))
+				.setCta()
+				.onClick(() => this.close())
+		);
+	}
+
+	onClose() {
+		this.renderer.unload();
 		this.contentEl.empty();
 	}
 }
