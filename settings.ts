@@ -650,7 +650,6 @@ export class QuickNotesBoardSettingTab extends PluginSettingTab {
 						slider
 							.setLimits(1, 8, 1)
 							.setValue(this.plugin.settings.widgetAccentLineWidth)
-							.setDynamicTooltip()
 							.onChange(async (value) => {
 								await this.plugin.setWidgetAccentLineWidth(value);
 							})
@@ -1375,7 +1374,6 @@ export class QuickNotesBoardSettingTab extends PluginSettingTab {
 					slider
 						.setLimits(1, 10, 1)
 						.setValue(normalizeGradientAnimationSeconds(cat.gradientAnimationSeconds))
-						.setDynamicTooltip()
 						.onChange(async (value) => {
 							await this.plugin.updateCategoryGradient(cat.name, { animationSeconds: value });
 							updateCategoryPreview();

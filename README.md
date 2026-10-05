@@ -548,6 +548,10 @@ If [data compression](#data-file-compression) is enabled, the file instead start
 
 ## Version history
 
+### 1.1.1
+
+- Fixed: code-quality warnings flagged by Obsidian's automated review — no behavior change for users.
+
 ### 1.1.0
 
 - New: **Note widgets** — small live tools inside a note. In the New note window, the **Widget** toggle (right under the title) shows a dropdown to choose the type, and the note is created ready to use. There are five widgets: **Clock** (time and date, in any time zone), **Calendar** (month view with month navigation), **Countdown** (days, hours, minutes and seconds to a date), **Stopwatch** (with laps) and **Pomodoro** (work and break cycles). A widget is written in the note as a `QNBWidget` code block with a few `option: value` lines, so you can also create or adjust them by hand. See the **Note widgets** section of the README for every option.

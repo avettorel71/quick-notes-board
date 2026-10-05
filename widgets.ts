@@ -66,10 +66,7 @@ export function paramInt(params: WidgetParams, key: string, fallback: number, mi
 type CssPropsEl = HTMLElement & { setCssProps: (props: Record<string, string>) => void };
 
 function h<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: string): HTMLElementTagNameMap[K] {
-	const el = document.createElement(tag);
-	if (cls) el.className = cls;
-	if (text !== undefined) el.textContent = text;
-	return el;
+	return createEl(tag, { cls, text });
 }
 
 function setText(el: HTMLElement, text: string) {

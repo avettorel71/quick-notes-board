@@ -1957,8 +1957,9 @@ button.qnb-group-menu-btn {
 	border-radius: 2px;
 }
 
+/* Più specifico di .qnb-widget-cd-units (display: flex), così "hidden" nasconde davvero. */
 .qnb-widget [hidden] {
-	display: none !important;
+	display: none;
 }
 
 .qnb-widget-label {
