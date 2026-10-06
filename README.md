@@ -8,6 +8,8 @@ It goes well beyond simple sticky notes: built-in **alarms and reminders** (incl
 
 Customizable **sounds** for dozens of actions and smooth **window animations** round it out, for an experience that feels as good as it is fast — all of it, completely free.
 
+☕ **Enjoying Quick Notes Board?** You can [buy me a coffee](https://buy.stripe.com/14A9AU7Io2626QW7t2cjS00) to support its development — thank you!
+
 ---
 
 ## Screenshot
@@ -43,7 +45,8 @@ Customizable **sounds** for dozens of actions and smooth **window animations** r
 23. [Data file format](#data-file-format)
 24. [Screenshots](#screenshots)
 25. [Version history](#version-history)
-26. [Development](#development)
+26. [Support the project](#support-the-project)
+27. [Development](#development)
 
 ---
 
@@ -71,6 +74,7 @@ Reload third-party plugins in Obsidian (or restart the app) and enable "Quick No
 - **Ribbon icon** (left sidebar): opens the board. If it's already open, clicking it again **closes** it — it works as a toggle, both from the icon and from the matching command.
 - The board opens in a full-width pane, like a regular note.
 - Closing the board (from the dedicated toolbar button, the tab's "X", or the ribbon icon again) restores everything to normal, including automatically reopening any side panels that were closed for [fullscreen mode](#board-appearance).
+- While it is open, the board **keeps the keyboard focus**, and clicking anywhere on it gives the focus back to it. Pressing **Esc** never takes you away from the board: it only does what it means there (leaves the editing of a note's text or title, clears the selection, closes the groups menu). To leave the board, close it or click another tab.
 
 ---
 
@@ -84,6 +88,7 @@ The top bar contains, from left to right:
 | **All** | Shows/hides **all** active notes at once (not trashed nor archived). Automatically disables itself when there's nothing to show or hide. |
 | **Category buttons** | One per registered category, colored like the category itself. Click to show/hide only that category's notes. If the category has [groups](#groups-and-subgroups), a small arrow next to it opens a menu with the individual groups. |
 | **Reorder** | Tidies up the visible notes into a grid. Cycles through **six modes** on each click, in sequence: current position (reading order), smallest→largest horizontal, largest→smallest horizontal, smallest→largest vertical, largest→smallest vertical, and **cascade**. Size-based modes always stay within the visible width — only vertical scrolling is ever needed, never horizontal. In cascade mode the notes are stacked from the oldest (at the back) to the newest (in front), each shifted down by one title bar and slightly to the right, so every note's title stays readable; if the stack doesn't fit the visible height, a new cascade starts to the right of the previous one. Stacking order isn't saved, so after a restart it depends on the order notes are loaded (the positions are kept). A short message after each click tells you which mode was just applied. |
+| **Labels** | Opens the [labels](#labels) window: create, rename, recolor, reorder (by dragging) and delete labels straight from the board, with the same options as the settings. |
 | **Info** | Opens a summary window: total notes, categories, trashed/archived/encrypted notes, file size (and, [when compression is on](#data-file-compression), the real vs. compressed size and the resulting savings). |
 | **Activity** | Opens the [Board Activity](#board-activity) window: a resizable bar chart of notes created and characters written per day, browsable by month. |
 | **Alarms** | Opens the [alarm list](#alarms-and-reminders) — every note with an alarm set, at a glance. |
@@ -177,15 +182,37 @@ All changes apply live as you adjust them.
 
 ## Categories
 
-Categories are managed from **Settings → Quick Notes Board**. For each one you can define:
+Categories are managed from **Settings → Quick Notes Board**, and most of their options can also be changed straight from the board, from the [category structure window](#category-structure-window). For each one you can define:
 
-- **Name** (editable at any time; notes belonging to it update automatically).
+- **Name** (editable at any time; notes belonging to it update automatically). You can also rename a category from its [structure window](#category-structure-window), without opening the settings.
 - **Background color** for the note header, optionally as a **gradient**: turn on **Background gradient** and pick an end color and a direction (left→right, right→left, top→bottom, bottom→top, or either 45° diagonal). Right under the end color, a **Title bar animation** toggle makes the gradient slide smoothly back and forth instead of staying still, at a **duration** you set from 1 to 10 seconds; with it off the bar is static exactly as before, and turning it back on picks up the duration and hover setting you last used. A further **"Animate only while hovering or editing"** toggle keeps the bar static until you hover the note, edit it, or drag it (the same moments the [compact icons](#quick-notes) setting reveals the action icons) — off by default, so the gradient animates all the time unless you turn this on. It's a plain CSS animation (no background timer), and it's skipped automatically if you have your system's "reduce motion" setting on. The category color is the gradient's start, and with the gradient toggle off the header is a single color exactly as before. Right under the colors, a **live preview bar** (a mock note title with the category name and icon, in the text and icon colors it will really have) always shows the result — single color, still gradient, or animated — and updates as you change colors, icon or gradient. The gradient (animated or not) applies to the note header bars only; everywhere else the category color is still used as a single color.
 - **Title text color**, with a "Default" option (contrast automatically computed from the background color).
 - **Icon**, shown before the title of every note in that category, and before its name everywhere else it appears (toolbar, [Note Explorer](#note-explorer), [Board Structure](#board-structure-diagram)): a gallery of 24 ready-to-use common icons, plus a free-text field to type the name of **any** icon from the Lucide library (with a live preview and a button that opens `lucide.dev/icons` to search), and a dedicated color for the icon itself.
 - Category order (reflected in the toolbar) can be **dragged and reordered** using the handle on the left of each row.
 
 At least one category must always remain.
+
+### Category structure window
+
+Right-click a category button in the toolbar to open the **structure** of that category. The title bar of this window, like that of the **Category colors** and **Rename category** windows below, is drawn exactly like the title of a note of that category: its color or gradient (animated too), its icon and icon color, and its text color. The bar sits flush against the top edge of the window, across its full width, and the window's close button (**X**) is inside it, on the same line as the title, like the buttons in a note's header. That way it is always clear at a glance which category you are working on. The window shows: its groups and subgroups as a tree, with the number of notes in each branch, and the totals for the whole category (notes and characters; encrypted notes are left out of the character count).
+
+At the bottom left, opposite **Close**, the **Rename category** button opens a small window with the current name. Type the new one and press **Enter** or **Rename**; **Cancel** leaves everything as it was. The new name applies to the category and to all its notes, archived and trashed ones included, exactly as when you rename it from the settings, and the structure window shows it right away. An empty name, or one already used by another category (capital letters don't count), is refused with a message.
+
+Next to it, the **Category colors** button opens a window with **all the look options of that category**, the same ones you find in the settings:
+
+- **Background color** and **text color** of the title bar, with a **Default** button for the text. The window's own title bar doubles as a live **preview** while you change the options.
+- **Background gradient**, with its **end color**, the **Title bar animation** (its duration, and whether it moves only on hover or while editing) and the **direction**.
+- The **icon** shown before the note title (the gallery of ready-to-use icons, or any Lucide icon typed by name) and the **icon color**.
+
+This is meant to let you change a category's whole look **straight from the board, without leaving it and without going through the settings**. Every choice is saved right away and you see it on the board behind the window. The color pickers save when you release them: while you drag, only the preview in the window moves, so the board is not redrawn at every shade.
+
+### Note windows
+
+The windows opened from a note have the same **title bar** as the category windows, with the colors of **the category the note belongs to**: its color or gradient (animated too), its icon and icon color, and its text color. They are the **info panel** (right-click the note's title), **Alarm and reminder**, **Change category**, **Text appearance**, **Lock** and **Unlock**, **Labels**, and the window of a **ringing alarm**. The title shown in the bar is the one the window already had (for the info panel, the note's title). This gives the board a consistent look and makes it clear at a glance which category a window belongs to.
+
+- If the window is opened for several selected notes (change category, text appearance), the bar uses the category of the first note.
+- A note whose category no longer exists keeps the plain title, as before.
+- The windows of the toolbar (Archive, Trash, Board info, Activity, Alarms, Explore notes, Board structure) and **New note** don't belong to a single category, so they keep their usual title.
 
 ---
 
@@ -203,7 +230,7 @@ In the toolbar, categories with groups show a small arrow: it opens a popup menu
 
 Labels are a **flat, cross-cutting** tagging system, independent from categories/groups/subgroups — a note can carry several labels at once, useful for finding notes that share something in common regardless of where they're organized (e.g. "Urgent" and "Waiting on someone else" together, across completely different categories).
 
-- Managed from **Settings → Labels**: name, color, add/delete, drag to reorder.
+- Managed from **Settings → Labels**, or straight from the board with the toolbar's **Labels** button (right after **Reorder**), without opening the settings: name, color, add/delete, drag to reorder. In that window a name is saved when you press **Enter** or leave the field, and a color when you release the picker; an empty name goes back to the previous one. A new label is added at the end, with its name already selected so you can type it right away. Deleting a label is immediate, as in the settings.
 - Assign labels to a note from its dedicated **Tags** icon, via checkboxes (as many as you like at once).
 - Assigned labels show as small colored dots in the note's [footer bar](#quick-notes), and (read-only) in the note's info panel (right-click the title), which also has **Duplicate note**, **Archive** and **Trash** buttons, in that order (left of Close): the same actions as the matching icons on the note itself, always applied to this specific note regardless of any other notes selected elsewhere on the board. Duplicate note makes a full copy (text, category, group, colors, font, labels, alarm...) with a new id, placed 24px down and to the right of the original and brought to the front; the duplicate starts with no pending snooze and no repetitions counted, even if the original had some. Having Archive and Trash here too means you can hide those two [action icons](#customizing-note-action-icons) from the note header if you'd like a cleaner, less crowded title bar — the info panel keeps both one right-click away regardless.
 - The toolbar's **label filter row** lets you click one or more label chips: selecting more than one **intersects** them (AND) — only notes carrying *every* selected label are shown, not just any one of them. Active exactly like the search box: it temporarily reveals matching notes even if their category is currently closed, without ever changing their underlying hidden/shown state.
@@ -468,6 +495,7 @@ Any note can be individually protected with a password, via the lock icon.
 - **Algorithm**: AES-256-GCM (authenticated encryption: a wrong password or tampered data explicitly fails decryption, instead of returning garbled text).
 - **Key derivation**: PBKDF2-SHA256, with a random salt generated per note and 250,000 iterations.
 - **Locking**: requires a password with confirmation; the content is encrypted and replaced on disk.
+- **Show the password**: the eye button next to the password field shows it in plain text, together with the confirmation field, so you can spot typing mistakes before locking; click it again to hide it. It works when unlocking too. The window always opens with the password hidden, and the choice is never saved.
 - **Unlocking**: requires the password; if wrong, a warning stays visible and you can try again, without altering the saved data in any way.
 - A locked note shows a closed-padlock icon before its title and placeholder text instead of its content; it can't be edited until unlocked.
 - **The password is never saved anywhere**: if forgotten, the encrypted content cannot be recovered in any way. The note's title and category always stay in plain text (needed for lists, trash, archive); only the note's text body is encrypted.
@@ -547,6 +575,17 @@ If [data compression](#data-file-compression) is enabled, the file instead start
 ---
 
 ## Version history
+
+### 1.1.2
+
+- New: **Rename category** button in the category structure window (right-click a category button in the toolbar), at the bottom left, opposite Close. It opens a small window with the current name; **Enter** or **Rename** confirms. The new name is applied to the category and to all its notes, archived and trashed ones included, without going to the settings. An empty name, or one already used by another category, is refused with a message.
+- New: **Category colors** button in the category structure window, next to Rename category. It opens a window with all the look options of a category — background and text colors, background gradient with its end color, title bar animation and direction, icon and icon color — so you can change everything straight from the board, without leaving it and without going through the settings. Every choice is saved right away and is visible on the board behind the window.
+- Improved: the windows of a category (structure, colors and rename) now have a title bar that looks like the title of a note of that category — same color or gradient (animated too), icon and icon color, and text color — flush against the top edge of the window, with the close button (X) inside the bar, on the same line as the title. In **Category colors** this bar also works as a live preview.
+- Improved: the windows opened from a note — info panel, alarm and reminder, change category, text appearance, lock and unlock, labels, and the window of a ringing alarm — now have the same title bar as the category windows, with the color or gradient, icon and text color of the note's category, for a consistent look and a clear sense of which category they belong to. A note whose category no longer exists keeps the plain title.
+- Fixed: pressing **Esc** in the board took you back to the note opened before it. The board now keeps the keyboard focus, so Esc stays in the board; to leave it, close it or click another tab.
+- Fixed: pressing **Esc** while renaming a note's title saved what you had typed instead of cancelling. Now it cancels, and **Enter** confirms as before.
+- New: **Show the password** button (an eye) in the window that locks and unlocks a note: it shows the password and its confirmation in plain text, to avoid typing mistakes. It starts hidden every time and nothing about it is saved.
+- New: **Labels** button in the toolbar, right after Reorder. It opens a window with the same options the settings have for labels — create, rename, change color, reorder by dragging, delete — so you can manage them straight from the board, without leaving it and without going through the settings.
 
 ### 1.1.1
 
@@ -652,6 +691,12 @@ First public release. Highlights include:
 - **Labels**: a flat, cross-cutting tagging system independent from categories/groups, with multi-select assignment, colored dots on notes, and an intersecting (AND) filter row in the toolbar.
 - **Note Explorer**: a searchable, collapsible overview of every note organized by category → group → subgroup.
 - **Board Structure diagram**: a read-only flowchart visualizing the whole category/group/subgroup hierarchy.
+
+---
+
+## Support the project
+
+Quick Notes Board is free and open source. If it makes your day a little easier and you would like to support its development, you can ☕ [buy me a coffee](https://buy.stripe.com/14A9AU7Io2626QW7t2cjS00). Thank you!
 
 ---
 

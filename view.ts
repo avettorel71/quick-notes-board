@@ -2,7 +2,7 @@ import { ItemView, WorkspaceLeaf, MarkdownRenderer, Menu, setIcon, Notice } from
 import type QuickNotesBoardPlugin from "./main";
 import type { QuickNote } from "./main";
 import { DEFAULT_FONT_SIZE, DEFAULT_FONT_FAMILY, DEFAULT_FONT_COLOR, DEFAULT_BG_COLOR, FONT_FAMILY_CSS, getContrastTextColor } from "./main";
-import { NewNoteModal, ChangeCategoryModal, FontSizeModal, TrashModal, ArchiveModal, LockPasswordModal, NoteInfoModal, CategoryStatsModal, BoardInfoModal, BoardActivityModal, DueDateModal, AlarmListModal, NoteExplorerModal, BoardStructureModal, LabelAssignModal } from "./modal";
+import { NewNoteModal, LabelsManagerModal, ChangeCategoryModal, FontSizeModal, TrashModal, ArchiveModal, LockPasswordModal, NoteInfoModal, CategoryStatsModal, BoardInfoModal, BoardActivityModal, DueDateModal, AlarmListModal, NoteExplorerModal, BoardStructureModal, LabelAssignModal } from "./modal";
 import { t } from "./i18n";
 import type { QnbCategory, QnbGroup, QnbNoteIconId } from "./settings";
 import { encryptText, decryptText, DecryptionError } from "./crypto";
@@ -82,9 +82,51 @@ export class QuickNotesBoardView extends ItemView {
 	async onOpen() {
 		this.plugin.playSound("board-open");
 		document.addEventListener("keydown", this.clearSelectionOnEscapeBound);
+		this.setupBoardFocus();
 		await this.rebuild();
+		this.focusBoard();
 		this.plugin.checkStaleRemindersNow();
 		this.plugin.flushMissedAlarmNotice();
+	}
+
+	/** La board tiene il focus della tastiera. Senza un elemento attivo, Obsidian alla
+	 * pressione di Esc riporterebbe all'ultima nota aperta: così invece Esc resta nella
+	 * board, e se ne esce solo chiudendola o scegliendo un'altra scheda. */
+	private setupBoardFocus() {
+		const el = this.contentEl;
+		el.setAttr("tabindex", "-1");
+		// Esc dentro la board lo gestisce la board (chiude il menu dei gruppi, toglie la
+		// selezione) e non lo passa a Obsidian. I campi in modifica fanno prima la loro parte.
+		this.registerDomEvent(el, "keydown", (evt: KeyboardEvent) => {
+			if (evt.key !== "Escape") return;
+			evt.stopPropagation();
+			this.closeGroupPopup();
+			if (this.selectedNoteIds.size > 0) this.clearSelection();
+		});
+		// Un clic nella board le ridà il focus se era altrove (prima che altri gestori del clic
+		// lo impediscano); un campo che riceve il clic se lo prende comunque subito dopo.
+		this.registerDomEvent(
+			el,
+			"mousedown",
+			() => {
+				if (!el.contains(el.ownerDocument.activeElement)) this.focusBoard();
+			},
+			{ capture: true }
+		);
+		// Tornando sulla scheda della board, il focus torna alla board.
+		this.registerEvent(
+			this.app.workspace.on("active-leaf-change", (leaf) => {
+				if (leaf === this.leaf) this.focusBoard();
+			})
+		);
+	}
+
+	/** Dà il focus alla board. Se un suo elemento ce l'ha già (un campo in modifica) lo lascia,
+	 * a meno di `force`, usato uscendo da una modifica. */
+	private focusBoard(force = false) {
+		const el = this.contentEl;
+		if (!force && el.contains(el.ownerDocument.activeElement)) return;
+		el.focus({ preventScroll: true });
 	}
 
 	async onClose() {
@@ -271,6 +313,14 @@ export class QuickNotesBoardView extends ItemView {
 		setIcon(tidyUpBtn.createSpan({ cls: "qnb-btn-icon" }), "layout-grid");
 		tidyUpBtn.createSpan({ text: this.tr("view.tidyUp") });
 		tidyUpBtn.addEventListener("click", () => void this.tidyUpNotes());
+
+		// Etichette: creare, rinominare, colorare e riordinare le etichette senza uscire dalla board.
+		const labelsBtn = toolbar.createEl("button", { cls: "qnb-btn" });
+		setIcon(labelsBtn.createSpan({ cls: "qnb-btn-icon" }), "tag");
+		labelsBtn.createSpan({ text: this.tr("view.labels") });
+		labelsBtn.addEventListener("click", () => {
+			new LabelsManagerModal(this.app, this.plugin).open();
+		});
 
 		const archiveBtn = toolbar.createEl("button", { cls: "qnb-btn" });
 		setIcon(archiveBtn.createSpan({ cls: "qnb-btn-icon" }), "archive");
@@ -1631,7 +1681,8 @@ export class QuickNotesBoardView extends ItemView {
 								t.noteEl.setCssStyles({ backgroundColor: bgColor || "" });
 							}
 							scheduleFontSave();
-						}
+						},
+						note.category
 					).open();
 				});
 			},
@@ -1731,7 +1782,7 @@ export class QuickNotesBoardView extends ItemView {
 								this.plugin.playSound("note-unlock-fail");
 								return false;
 							}
-						}).open();
+						}, note.category).open();
 					} else {
 						// Se la nota è in modifica, salva subito il testo digitato prima di cifrarlo:
 						// altrimenti si perderebbero le modifiche non ancora confermate col blur.
@@ -1747,7 +1798,7 @@ export class QuickNotesBoardView extends ItemView {
 							this.updateLockIcon(lockBtn, note.encrypted);
 							this.renderBoard();
 							return true;
-						}).open();
+						}, note.category).open();
 					}
 				});
 			},
@@ -2115,7 +2166,12 @@ export class QuickNotesBoardView extends ItemView {
 		input.addEventListener("mousedown", (evt) => evt.stopPropagation());
 		input.addEventListener("click", (evt) => evt.stopPropagation());
 
+		// Una sola chiusura: togliere il campo mentre ha il focus fa scattare anche il suo blur,
+		// che altrimenti salverebbe il testo appena annullato con Esc.
+		let finished = false;
 		const finish = async (save: boolean) => {
+			if (finished) return;
+			finished = true;
 			const newTitle = save ? input.value.trim() || this.tr("view.note.untitled") : currentText;
 			if (save && newTitle !== note.title) {
 				note.title = newTitle;
@@ -2129,10 +2185,11 @@ export class QuickNotesBoardView extends ItemView {
 		input.addEventListener("keydown", (evt) => {
 			if (evt.key === "Enter") {
 				evt.preventDefault();
-				input.blur();
+				this.focusBoard(true); // il blur del campo salva il titolo
 			} else if (evt.key === "Escape") {
 				evt.preventDefault();
 				void finish(false);
+				this.focusBoard(true);
 			}
 		});
 
@@ -2748,7 +2805,9 @@ export class QuickNotesBoardView extends ItemView {
 				if (suggestEl.style.display !== "none") {
 					hideSuggestions();
 				} else {
-					textarea.blur();
+					// Spostare il focus sulla board fa uscire il testo dalla modifica (salvataggio
+					// sul blur, come prima), senza lasciare la tastiera senza un elemento attivo.
+					this.focusBoard(true);
 				}
 				return;
 			}

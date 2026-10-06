@@ -1171,6 +1171,40 @@ button.qnb-group-menu-btn {
 	font-size: 0.9em;
 }
 
+/* Segnaposto della riga "Conferma password": occupa lo spazio dell'occhio della riga sopra,
+ * così i due campi password sono allineati. Invisibile e non cliccabile. */
+.qnb-password-eye-spacer {
+	visibility: hidden;
+	pointer-events: none;
+}
+
+/* La board tiene il focus della tastiera (per Esc), senza mostrare il bordo di selezione. */
+.qnb-container:focus,
+.qnb-container:focus-visible {
+	outline: none;
+}
+
+/* Tasti a sinistra del piede (es. "Rinomina categoria" e "Colori categoria"). */
+.qnb-note-info-footer-start {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+
+/* Finestra "Colori categoria": un po' più larga, per la galleria delle icone. */
+.qnb-category-style-modal.qnb-category-style-modal {
+	width: min(680px, 94vw);
+	max-width: 94vw;
+}
+
+/* Messaggio di errore sotto il campo della finestra "Rinomina categoria". */
+.qnb-rename-category-error {
+	min-height: 1.4em;
+	margin-bottom: 4px;
+	color: var(--text-error);
+	font-size: 0.9em;
+}
+
 .qnb-note-info-value {
 	color: var(--text-normal);
 	font-weight: 500;
@@ -1882,6 +1916,30 @@ button.qnb-group-menu-btn {
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
+}
+
+/* Barra del titolo delle finestre di una categoria (Struttura, Colori, Rinomina): in cima alla
+ * finestra, a filo del bordo e a tutta larghezza, come l'intestazione di una nota. Le variabili
+ * --qnb-bleed-* (spazio interno e angoli della finestra) le imposta il codice leggendole da
+ * quelle reali; i valori qui sono di riserva. La X di chiusura di Obsidian, in alto a destra,
+ * ricade dentro la barra: a destra si lascia lo spazio per non coprire il titolo. */
+.qnb-category-title-bar {
+	height: 40px;
+	margin: calc(var(--qnb-bleed-top, 16px) * -1) calc(var(--qnb-bleed-right, 16px) * -1) 12px calc(var(--qnb-bleed-left, 16px) * -1);
+	padding: 0 52px 0 var(--qnb-bleed-left, 16px);
+	border: none;
+	border-radius: var(--qnb-bleed-radius, 12px) var(--qnb-bleed-radius, 12px) 0 0;
+	font-size: 1em;
+}
+
+.qnb-category-title-bar .qnb-category-preview-title {
+	flex: 1 1 auto;
+	min-width: 0;
+}
+
+/* Il titolo vuoto della finestra non serve: il titolo è la barra. */
+.qnb-category-modal.qnb-category-modal .modal-title {
+	display: none;
 }
 
 /* ===== ANIMAZIONE SFUMATURA (inizio) — per togliere la funzione, cercare questo stesso

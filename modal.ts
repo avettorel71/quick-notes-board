@@ -1,8 +1,11 @@
-import { App, Component, MarkdownRenderer, Modal, Setting, ButtonComponent, ToggleComponent, setIcon, Notice } from "obsidian";
+import { App, Component, MarkdownRenderer, Modal, Setting, ButtonComponent, ColorComponent, ToggleComponent, setIcon, Notice } from "obsidian";
 import { WIDGET_TYPES, widgetTemplate, widgetTypeName } from "./widgets";
 import type { WidgetType } from "./widgets";
 import { CHANGELOG } from "./changelog";
-import type { QnbCategory, QnbGroup } from "./settings";
+import { CATEGORY_ICON_OPTIONS } from "./settings";
+import type { QnbCategory, QnbGroup, QnbLabel } from "./settings";
+import { GRADIENT_DIRECTIONS, defaultGradientEndColor, isHexColor, normalizeGradientAnimationSeconds, resolveCategoryBackground } from "./gradient";
+import type { QnbGradientDirection } from "./gradient";
 import type QuickNotesBoardPlugin from "./main";
 import type { QuickNote, QnbFontFamily } from "./main";
 import { getContrastTextColor } from "./main";
@@ -211,7 +214,11 @@ export class ChangeCategoryModal extends Modal {
 		this.plugin.playSound("dialog-change-category");
 		const { contentEl } = this;
 		contentEl.empty();
-		new Setting(contentEl).setName(this.tr("modal.changeCategory.title")).setHeading();
+		// Barra con i colori della categoria attuale della nota (quella da cui si parte: il
+		// menu sotto serve a sceglierne un'altra).
+		if (!mountNoteWindowBar(this, this.plugin, this.category, this.tr("modal.changeCategory.title"))) {
+			new Setting(contentEl).setName(this.tr("modal.changeCategory.title")).setHeading();
+		}
 
 		new Setting(contentEl).setName(this.tr("modal.changeCategory.categoryLabel")).addDropdown((dd) => {
 			for (const cat of this.categories) {
@@ -301,6 +308,7 @@ export class FontSizeModal extends Modal {
 	private onChangeFontFamily: (fontFamily: QnbFontFamily) => void;
 	private onChangeColor: (color: string) => void;
 	private onChangeBgColor: (color: string) => void;
+	private categoryName: string | undefined;
 
 	constructor(
 		app: App,
@@ -312,11 +320,13 @@ export class FontSizeModal extends Modal {
 		onChangeSize: (size: number) => void,
 		onChangeFontFamily: (fontFamily: QnbFontFamily) => void,
 		onChangeColor: (color: string) => void,
-		onChangeBgColor: (color: string) => void
+		onChangeBgColor: (color: string) => void,
+		categoryName?: string
 	) {
 		super(app);
 		this.plugin = plugin;
 		this.lang = plugin.settings.language;
+		this.categoryName = categoryName;
 		this.size = currentSize;
 		this.fontFamily = currentFontFamily;
 		this.fontColor = currentFontColor;
@@ -335,7 +345,9 @@ export class FontSizeModal extends Modal {
 		this.plugin.playSound("dialog-font-size");
 		const { contentEl } = this;
 		contentEl.empty();
-		new Setting(contentEl).setName(this.tr("modal.fontSize.title")).setHeading();
+		if (!mountNoteWindowBar(this, this.plugin, this.categoryName, this.tr("modal.fontSize.title"))) {
+			new Setting(contentEl).setName(this.tr("modal.fontSize.title")).setHeading();
+		}
 		contentEl.createEl("p", { cls: "setting-item-description", text: this.tr("modal.fontSize.desc") });
 
 		new Setting(contentEl)
@@ -632,6 +644,10 @@ export class LockPasswordModal extends Modal {
 	private lang: QnbLang;
 	private mode: QnbLockMode;
 	private onSubmit: (password: string) => Promise<boolean>;
+	private categoryName: string | undefined;
+	/** Campi della password (uno, o due con la conferma) e se sono mostrati in chiaro. */
+	private passwordInputs: HTMLInputElement[] = [];
+	private showPassword = false;
 
 	private password = "";
 	private confirmPassword = "";
@@ -643,13 +659,15 @@ export class LockPasswordModal extends Modal {
 		app: App,
 		plugin: QuickNotesBoardPlugin,
 		mode: QnbLockMode,
-		onSubmit: (password: string) => Promise<boolean>
+		onSubmit: (password: string) => Promise<boolean>,
+		categoryName?: string
 	) {
 		super(app);
 		this.plugin = plugin;
 		this.lang = plugin.settings.language;
 		this.mode = mode;
 		this.onSubmit = onSubmit;
+		this.categoryName = categoryName;
 	}
 
 	private tr(key: string, vars?: Record<string, string>): string {
@@ -662,17 +680,24 @@ export class LockPasswordModal extends Modal {
 		contentEl.empty();
 
 		const isLock = this.mode === "lock";
-		new Setting(contentEl).setName(this.tr(isLock ? "modal.lock.title" : "modal.unlock.title")).setHeading();
+		const lockTitle = this.tr(isLock ? "modal.lock.title" : "modal.unlock.title");
+		if (!mountNoteWindowBar(this, this.plugin, this.categoryName, lockTitle)) {
+			new Setting(contentEl).setName(lockTitle).setHeading();
+		}
 		contentEl.createEl("p", {
 			cls: "setting-item-description",
 			text: this.tr(isLock ? "modal.lock.desc" : "modal.unlock.desc"),
 		});
 
+		// Ogni volta la finestra si apre con la password nascosta.
+		this.passwordInputs = [];
+		this.showPassword = false;
 		const passwordSetting = new Setting(contentEl).setName(
 			this.tr(isLock ? "modal.lock.passwordLabel" : "modal.unlock.passwordLabel")
 		);
 		passwordSetting.addText((text) => {
 			text.inputEl.type = "password";
+			this.passwordInputs.push(text.inputEl);
 			text.onChange((v) => (this.password = v));
 			text.inputEl.addEventListener("keydown", (evt) => {
 				if (evt.key === "Enter") {
@@ -682,11 +707,24 @@ export class LockPasswordModal extends Modal {
 			});
 			window.setTimeout(() => text.inputEl.focus(), 0);
 		});
+		// Occhio a destra del campo: mostra o nasconde la password (e la conferma), per
+		// evitare errori di digitazione. Senza togliere il focus al campo in cui si scrive.
+		passwordSetting.addExtraButton((btn) => {
+			btn.setIcon("eye").setTooltip(this.tr("modal.password.show"));
+			btn.extraSettingsEl.addEventListener("mousedown", (evt) => evt.preventDefault());
+			btn.onClick(() => {
+				this.showPassword = !this.showPassword;
+				for (const input of this.passwordInputs) input.type = this.showPassword ? "text" : "password";
+				btn.setIcon(this.showPassword ? "eye-off" : "eye");
+				btn.setTooltip(this.tr(this.showPassword ? "modal.password.hide" : "modal.password.show"));
+			});
+		});
 
 		if (isLock) {
 			const confirmSetting = new Setting(contentEl).setName(this.tr("modal.lock.confirmLabel"));
 			confirmSetting.addText((text) => {
 				text.inputEl.type = "password";
+				this.passwordInputs.push(text.inputEl);
 				text.onChange((v) => (this.confirmPassword = v));
 				text.inputEl.addEventListener("keydown", (evt) => {
 					if (evt.key === "Enter") {
@@ -694,6 +732,13 @@ export class LockPasswordModal extends Modal {
 						void this.trySubmit();
 					}
 				});
+			});
+			// Segnaposto invisibile, identico all'occhio della riga sopra: i due campi hanno
+			// così gli stessi bordi, sinistro e destro, e restano allineati.
+			confirmSetting.addExtraButton((btn) => {
+				btn.setIcon("eye");
+				btn.extraSettingsEl.addClass("qnb-password-eye-spacer");
+				btn.extraSettingsEl.setAttr("aria-hidden", "true");
 			});
 		}
 
@@ -748,6 +793,7 @@ export class LockPasswordModal extends Modal {
 	onClose() {
 		this.password = "";
 		this.confirmPassword = "";
+		this.passwordInputs = [];
 		this.contentEl.empty();
 	}
 }
@@ -796,7 +842,10 @@ export class NoteInfoModal extends Modal {
 		this.plugin.playSound("dialog-note-info");
 		const { contentEl } = this;
 		contentEl.empty();
-		new Setting(contentEl).setName(this.note.title || this.tr("view.note.untitled")).setHeading();
+		const infoTitle = this.note.title || this.tr("view.note.untitled");
+		if (!mountNoteWindowBar(this, this.plugin, this.note.category, infoTitle)) {
+			new Setting(contentEl).setName(infoTitle).setHeading();
+		}
 
 		const rows: { label: string; value: string }[] = [
 			{ label: this.tr("modal.noteInfo.created"), value: new Date(this.note.createdAt).toLocaleString() },
@@ -922,10 +971,70 @@ function renderCategoryGroupTree(
 	}
 }
 
+/** Disegna dentro `el` la barra del titolo di una categoria, com'è il titolo di una nota di
+ * quella categoria: sfondo (colore, oppure sfumatura, anche animata), icona con il suo colore
+ * e testo con il colore del testo scelto per la categoria. Serve da titolo alle finestre
+ * della categoria e da anteprima dal vivo in "Colori categoria". */
+function renderCategoryBar(el: HTMLElement, cat: QnbCategory, label: string) {
+	el.empty();
+	const bg = resolveCategoryBackground(cat);
+	el.setCssStyles({ backgroundColor: bg.color, backgroundImage: bg.image ?? "none" });
+	el.setCssStyles({ color: getContrastTextColor(bg.contrastBase) });
+	// ===== ANIMAZIONE SFUMATURA (inizio) =====
+	el.toggleClass("qnb-gradient-animated", bg.animated && !bg.animateHoverOnly);
+	el.toggleClass("qnb-gradient-animate-hover", bg.animated && bg.animateHoverOnly);
+	if (bg.animated) el.setCssProps({ "--qnb-gradient-anim-seconds": `${bg.animationSeconds}s` });
+	// ===== ANIMAZIONE SFUMATURA (fine) =====
+	if (cat.icon) {
+		const iconEl = el.createSpan({ cls: "qnb-category-preview-icon" });
+		setIcon(iconEl, cat.icon);
+		if (cat.iconColor) iconEl.setCssStyles({ color: cat.iconColor });
+	}
+	const titleEl = el.createSpan({ cls: "qnb-category-preview-title", text: label });
+	if (cat.titleColor) titleEl.setCssStyles({ color: cat.titleColor });
+}
+
+/** Crea la barra del titolo di una finestra e la mette in cima alla finestra stessa, a filo del
+ * bordo e a tutta larghezza (come l'intestazione di una nota). Lo spazio interno della finestra
+ * e l'arrotondamento degli angoli si leggono da quelli reali, così la barra combacia con
+ * qualunque tema. La X di chiusura di Obsidian, in alto a destra, ricade dentro la barra, sulla
+ * stessa riga del titolo. */
+function mountCategoryBar(modalEl: HTMLElement): HTMLElement {
+	const bar = modalEl.createDiv({ cls: "qnb-category-preview qnb-category-title-bar" });
+	modalEl.prepend(bar);
+	const cs = window.getComputedStyle(modalEl);
+	const px = (value: string, fallback: number) => {
+		const n = parseFloat(value);
+		return Number.isFinite(n) ? n : fallback;
+	};
+	bar.setCssProps({
+		"--qnb-bleed-top": `${px(cs.paddingTop, 16)}px`,
+		"--qnb-bleed-left": `${px(cs.paddingLeft, 16)}px`,
+		"--qnb-bleed-right": `${px(cs.paddingRight, 16)}px`,
+		"--qnb-bleed-radius": `${px(cs.borderTopLeftRadius, 12)}px`,
+	});
+	return bar;
+}
+
+/** Mette in cima a una finestra legata a una nota la stessa barra del titolo delle finestre
+ * della categoria, con i colori della categoria a cui la nota appartiene: così la finestra
+ * si riconosce come "di quella categoria". Torna true se ha messo la barra; false se la
+ * categoria non esiste più (nota con categoria sconosciuta): il chiamante tiene allora il
+ * titolo semplice di sempre. Si può richiamare più volte (finestre che si ridisegnano). */
+function mountNoteWindowBar(modal: Modal, plugin: QuickNotesBoardPlugin, categoryName: string | undefined, title: string): boolean {
+	const cat = categoryName ? plugin.settings.categories.find((c) => c.name === categoryName) : undefined;
+	if (!cat) return false;
+	modal.modalEl.addClass("qnb-category-modal");
+	modal.modalEl.querySelector(":scope > .qnb-category-title-bar")?.remove();
+	renderCategoryBar(mountCategoryBar(modal.modalEl), cat, title);
+	return true;
+}
+
 export class CategoryStatsModal extends Modal {
 	private plugin: QuickNotesBoardPlugin;
 	private lang: QnbLang;
 	private category: QnbCategory;
+	private barEl: HTMLElement | null = null;
 
 	constructor(app: App, plugin: QuickNotesBoardPlugin, category: QnbCategory) {
 		super(app);
@@ -940,9 +1049,18 @@ export class CategoryStatsModal extends Modal {
 
 	onOpen() {
 		this.plugin.playSound("dialog-category-stats");
+		this.modalEl.addClass("qnb-category-modal");
+		this.barEl = mountCategoryBar(this.modalEl);
+		this.render();
+	}
+
+	/** Disegna il contenuto; si richiama anche dopo una rinomina, per mostrare il nuovo nome. */
+	private render() {
 		const { contentEl } = this;
 		contentEl.empty();
-		new Setting(contentEl).setName(this.tr("modal.categoryStats.title", { category: this.category.name })).setHeading();
+		if (this.barEl) {
+			renderCategoryBar(this.barEl, this.category, this.tr("modal.categoryStats.title", { category: this.category.name }));
+		}
 
 		const activeNotes = this.plugin.notes.filter(
 			(n) => !n.deleted && !n.archived && n.category === this.category.name
@@ -973,13 +1091,602 @@ export class CategoryStatsModal extends Modal {
 			});
 		}
 
-		new Setting(contentEl).addButton((btn) =>
-			btn.setButtonText(this.tr("trash.close")).onClick(() => this.close())
+		// Riga finale: "Rinomina categoria" a sinistra, "Chiudi" a destra (stesso schema del
+		// pannello informativo della nota).
+		const footer = contentEl.createDiv({ cls: "qnb-note-info-footer" });
+		const actions = footer.createDiv({ cls: "qnb-note-info-footer-start" });
+		new ButtonComponent(actions).setButtonText(this.tr("modal.categoryStats.rename")).onClick(() => {
+			new RenameCategoryModal(this.app, this.plugin, this.category, (newName) => {
+				this.category = this.plugin.settings.categories.find((c) => c.name === newName) ?? this.category;
+				this.render();
+			}).open();
+		});
+		new ButtonComponent(actions).setButtonText(this.tr("modal.categoryStats.colors")).onClick(() => {
+			new CategoryStyleModal(this.app, this.plugin, this.category).open();
+		});
+		new ButtonComponent(footer).setButtonText(this.tr("trash.close")).onClick(() => this.close());
+	}
+
+	onClose() {
+		this.barEl?.remove();
+		this.contentEl.empty();
+	}
+}
+
+/** Piccola finestra per rinominare una categoria dalla finestra della sua struttura, senza
+ * passare dalle impostazioni. Usa la stessa rinomina delle impostazioni
+ * (`plugin.renameCategory`): aggiorna la categoria e tutte le sue note. */
+export class RenameCategoryModal extends Modal {
+	private plugin: QuickNotesBoardPlugin;
+	private lang: QnbLang;
+	private category: QnbCategory;
+	private onRenamed: (newName: string) => void;
+	private value: string;
+	private errorEl: HTMLElement | null = null;
+	private barEl: HTMLElement | null = null;
+
+	constructor(app: App, plugin: QuickNotesBoardPlugin, category: QnbCategory, onRenamed: (newName: string) => void) {
+		super(app);
+		this.plugin = plugin;
+		this.lang = plugin.settings.language;
+		this.category = category;
+		this.onRenamed = onRenamed;
+		this.value = category.name;
+	}
+
+	private tr(key: string, vars?: Record<string, string>): string {
+		return t(this.lang, key, vars);
+	}
+
+	onOpen() {
+		const { contentEl } = this;
+		contentEl.empty();
+		this.modalEl.addClass("qnb-category-modal");
+		this.barEl = mountCategoryBar(this.modalEl);
+		renderCategoryBar(this.barEl, this.category, this.tr("modal.renameCategory.title"));
+
+		new Setting(contentEl).setName(this.tr("modal.renameCategory.nameLabel")).addText((text) => {
+			text.setValue(this.value).onChange((v) => {
+				this.value = v;
+				this.setError("");
+			});
+			text.inputEl.addEventListener("keydown", (evt) => {
+				if (evt.key === "Enter") {
+					evt.preventDefault();
+					void this.submit();
+				}
+			});
+			window.setTimeout(() => {
+				text.inputEl.focus();
+				text.inputEl.select();
+			}, 0);
+		});
+		this.errorEl = contentEl.createDiv({ cls: "qnb-rename-category-error" });
+
+		const footer = contentEl.createDiv({ cls: "qnb-note-info-footer" });
+		new ButtonComponent(footer).setButtonText(this.tr("modal.cancel")).onClick(() => this.close());
+		new ButtonComponent(footer)
+			.setButtonText(this.tr("modal.renameCategory.confirm"))
+			.setCta()
+			.onClick(() => void this.submit());
+	}
+
+	private setError(message: string) {
+		this.errorEl?.setText(message);
+	}
+
+	private async submit() {
+		const newName = this.value.trim();
+		if (!newName) {
+			this.setError(this.tr("modal.renameCategory.empty"));
+			return;
+		}
+		if (newName === this.category.name) {
+			this.close();
+			return;
+		}
+		// Un nome già usato da un'altra categoria, senza badare alle maiuscole.
+		const taken = this.plugin.settings.categories.some(
+			(c) => c !== this.category && c.name.toLowerCase() === newName.toLowerCase()
 		);
+		if (taken || !(await this.plugin.renameCategory(this.category.name, newName))) {
+			this.setError(this.tr("settings.categories.new.duplicate"));
+			return;
+		}
+		this.close();
+		this.onRenamed(newName);
+	}
+
+	onClose() {
+		this.barEl?.remove();
+		this.contentEl.empty();
+	}
+}
+
+/** Finestra "Colori categoria": gli stessi controlli che le impostazioni offrono per una
+ * categoria (colori, sfumatura, animazione, orientamento, icona e colore dell'icona), così
+ * se ne cambia l'aspetto direttamente dalla board, senza aprire le impostazioni. Ogni scelta
+ * si salva subito, con le stesse funzioni delle impostazioni. I selettori di colore salvano
+ * quando li si rilascia: mentre li si trascina si muove solo l'anteprima della finestra,
+ * per non ridisegnare la board a ogni sfumatura di colore. */
+export class CategoryStyleModal extends Modal {
+	private plugin: QuickNotesBoardPlugin;
+	private lang: QnbLang;
+	private category: QnbCategory;
+	/** Valori dei selettori di colore mentre li si trascina: mostrati nell'anteprima, non ancora salvati. */
+	private draft: Partial<QnbCategory> = {};
+	private previewEl: HTMLElement | null = null;
+
+	constructor(app: App, plugin: QuickNotesBoardPlugin, category: QnbCategory) {
+		super(app);
+		this.plugin = plugin;
+		this.lang = plugin.settings.language;
+		this.category = category;
+	}
+
+	private tr(key: string, vars?: Record<string, string>): string {
+		return t(this.lang, key, vars);
+	}
+
+	onOpen() {
+		const { contentEl } = this;
+		this.modalEl.addClass("qnb-category-style-modal");
+		this.modalEl.addClass("qnb-category-modal");
+		contentEl.empty();
+		this.draft = {};
+		// La barra del titolo fa anche da anteprima: cambia mentre si modificano i colori.
+		this.previewEl = mountCategoryBar(this.modalEl);
+		this.renderPreview();
+		this.buildColors(contentEl);
+		this.buildGradient(contentEl);
+		this.buildIconPicker(contentEl);
+		new Setting(contentEl).addButton((btn) => btn.setButtonText(this.tr("trash.close")).onClick(() => this.close()));
+	}
+
+	onClose() {
+		this.previewEl?.remove();
+		this.contentEl.empty();
+	}
+
+	/** Collega un selettore di colore: mentre lo si trascina (`input`) muove solo l'anteprima,
+	 * quando lo si rilascia (`change`) salva. */
+	private bindColorPicker(
+		cp: ColorComponent,
+		label: string,
+		onDraft: (value: string) => void,
+		onCommit: (value: string) => Promise<void>
+	) {
+		const el = (cp as unknown as { colorPickerEl: HTMLInputElement }).colorPickerEl;
+		el.setAttr("aria-label", label);
+		el.addEventListener("input", () => onDraft(el.value));
+		el.addEventListener("change", () => void onCommit(el.value));
+	}
+
+	/** Ridisegna la barra del titolo della finestra, che fa da anteprima: usa i valori in corso
+	 * di modifica (colori trascinati e non ancora salvati), se ci sono. */
+	private renderPreview() {
+		if (!this.previewEl) return;
+		const view: QnbCategory = { ...this.category, ...this.draft };
+		renderCategoryBar(this.previewEl, view, this.tr("modal.categoryStyle.title", { category: view.name }));
+	}
+
+	/** Colore della categoria e colore del testo con "Predefinito". */
+	private buildColors(containerEl: HTMLElement) {
+		const cat = this.category;
+		const colorsRow = new Setting(containerEl).setName(this.tr("settings.categories.colorsLabel"));
+		colorsRow.addColorPicker((cp) => {
+			cp.setValue(cat.color);
+			this.bindColorPicker(
+				cp,
+				this.tr("settings.categories.bgColorTooltip"),
+				(value) => {
+					this.draft.color = value;
+					this.renderPreview();
+				},
+				async (value) => {
+					await this.plugin.updateCategoryColor(cat.name, value);
+					delete this.draft.color;
+					this.renderPreview();
+				}
+			);
+		});
+
+		let titleColorPicker: ColorComponent | null = null;
+		colorsRow.addColorPicker((cp) => {
+			titleColorPicker = cp;
+			cp.setValue(cat.titleColor || "#ffffff");
+			this.bindColorPicker(
+				cp,
+				this.tr("settings.categories.titleColorTooltip"),
+				(value) => {
+					this.draft.titleColor = value;
+					this.renderPreview();
+				},
+				async (value) => {
+					await this.plugin.updateCategoryTitleColor(cat.name, value);
+					delete this.draft.titleColor;
+					this.renderPreview();
+				}
+			);
+		});
+		colorsRow.addButton((btn) =>
+			btn
+				.setButtonText(this.tr("settings.categories.titleColorReset"))
+				.setTooltip(this.tr("settings.categories.titleColorResetTooltip"))
+				.onClick(async () => {
+					await this.plugin.updateCategoryTitleColor(cat.name, "");
+					delete this.draft.titleColor;
+					titleColorPicker?.setValue("#ffffff");
+					this.renderPreview();
+				})
+		);
+
+	}
+
+	/** Sfumatura di sfondo, colore finale, animazione (con durata e "solo al passaggio del
+	 * mouse") e orientamento. I controlli si mostrano e si nascondono sul posto. */
+	private buildGradient(containerEl: HTMLElement) {
+		const cat = this.category;
+		const gradientToggleRow = new Setting(containerEl)
+			.setName(this.tr("settings.categories.gradient.label"))
+			.setDesc(this.tr("settings.categories.gradient.desc"));
+		const gradientControls = containerEl.createDiv({ cls: "qnb-gradient-controls" });
+		const setGradientControlsVisible = (visible: boolean) => {
+			gradientControls.setCssStyles({ display: visible ? "block" : "none" });
+		};
+		let gradientEndPicker: ColorComponent | null = null;
+		gradientToggleRow.addToggle((toggle) => {
+			toggle.setValue(cat.gradientEnabled === true);
+			toggle.onChange(async (value) => {
+				if (value && !isHexColor(cat.gradientEndColor)) {
+					// Prima volta: propone un colore finale, così l'effetto si vede subito.
+					const proposed = defaultGradientEndColor(cat.color);
+					await this.plugin.updateCategoryGradient(cat.name, { enabled: true, endColor: proposed });
+					gradientEndPicker?.setValue(proposed);
+				} else {
+					await this.plugin.updateCategoryGradient(cat.name, { enabled: value });
+				}
+				setGradientControlsVisible(value);
+				this.renderPreview();
+			});
+		});
+		setGradientControlsVisible(cat.gradientEnabled === true);
+
+		new Setting(gradientControls)
+			.setName(this.tr("settings.categories.gradient.endColor"))
+			.addColorPicker((cp) => {
+				gradientEndPicker = cp;
+				// Se il colore finale non è mai stato scelto si parte dal colore di inizio.
+				cp.setValue(isHexColor(cat.gradientEndColor) ? cat.gradientEndColor : cat.color);
+				this.bindColorPicker(
+					cp,
+					this.tr("settings.categories.gradient.endColorTooltip"),
+					(value) => {
+						this.draft.gradientEndColor = value;
+						this.renderPreview();
+					},
+					async (value) => {
+						await this.plugin.updateCategoryGradient(cat.name, { endColor: value });
+						delete this.draft.gradientEndColor;
+						this.renderPreview();
+					}
+				);
+			});
+
+		// ===== ANIMAZIONE SFUMATURA (inizio) =====
+		const animationToggleRow = new Setting(gradientControls).setName(
+			this.tr("settings.categories.gradient.animation.label")
+		);
+		const animationDurationRow = new Setting(gradientControls)
+			.setClass("qnb-gradient-animation-row")
+			.setName(this.tr("settings.categories.gradient.animation.duration"));
+		const animationHoverOnlyRow = new Setting(gradientControls)
+			.setClass("qnb-gradient-animation-row")
+			.setName(this.tr("settings.categories.gradient.animation.hoverOnly"));
+		const setAnimationSubOptionsVisible = (visible: boolean) => {
+			const display = visible ? "flex" : "none";
+			animationDurationRow.settingEl.setCssStyles({ display });
+			animationHoverOnlyRow.settingEl.setCssStyles({ display });
+		};
+		animationToggleRow.addToggle((toggle) => {
+			toggle.setValue(cat.gradientAnimated === true);
+			toggle.onChange(async (value) => {
+				await this.plugin.updateCategoryGradient(cat.name, { animated: value });
+				setAnimationSubOptionsVisible(value);
+				this.renderPreview();
+			});
+		});
+		animationDurationRow.addSlider((slider) => {
+			slider
+				.setLimits(1, 10, 1)
+				.setValue(normalizeGradientAnimationSeconds(cat.gradientAnimationSeconds))
+				.onChange(async (value) => {
+					await this.plugin.updateCategoryGradient(cat.name, { animationSeconds: value });
+					this.renderPreview();
+				});
+		});
+		animationHoverOnlyRow.addToggle((toggle) => {
+			toggle.setValue(cat.gradientAnimateHoverOnly === true);
+			toggle.onChange(async (value) => {
+				await this.plugin.updateCategoryGradient(cat.name, { hoverOnly: value });
+				this.renderPreview();
+			});
+		});
+		setAnimationSubOptionsVisible(cat.gradientAnimated === true);
+		// ===== ANIMAZIONE SFUMATURA (fine) =====
+
+		new Setting(gradientControls)
+			.setName(this.tr("settings.categories.gradient.direction"))
+			.addDropdown((dd) => {
+				for (const opt of GRADIENT_DIRECTIONS) dd.addOption(opt.value, this.tr(opt.labelKey));
+				dd.setValue(cat.gradientDirection ?? "to-right");
+				dd.onChange(async (value) => {
+					await this.plugin.updateCategoryGradient(cat.name, { direction: value as QnbGradientDirection });
+					this.renderPreview();
+				});
+			});
+	}
+
+	/** Icona prima del titolo delle note: galleria delle icone rapide, campo libero per
+	 * qualsiasi icona Lucide, colore dell'icona e collegamento alla libreria. */
+	private buildIconPicker(containerEl: HTMLElement) {
+		const cat = this.category;
+		const wrapper = containerEl.createDiv({ cls: "qnb-icon-picker" });
+		wrapper.createSpan({ cls: "qnb-icon-picker-label", text: this.tr("settings.categories.iconTooltip") });
+
+		const grid = wrapper.createDiv({ cls: "qnb-icon-picker-grid" });
+		const quickButtons: HTMLElement[] = [];
+		const highlightQuickMatch = (value: string) => {
+			for (const b of quickButtons) b.removeClass("is-selected");
+			const idx = CATEGORY_ICON_OPTIONS.findIndex((o) => o.value === value);
+			if (idx !== -1) quickButtons[idx].addClass("is-selected");
+		};
+
+		const customRow = wrapper.createDiv({ cls: "qnb-icon-picker-custom" });
+		const customPreview = customRow.createDiv({ cls: "qnb-icon-picker-custom-preview" });
+		const updateCustomPreview = (value: string) => {
+			customPreview.empty();
+			const trimmed = value.trim();
+			if (trimmed) setIcon(customPreview, trimmed);
+		};
+		const customInput = customRow.createEl("input", {
+			cls: "qnb-icon-picker-custom-input",
+			attr: { type: "text", placeholder: this.tr("settings.categories.iconCustomPlaceholder") },
+		});
+
+		for (const opt of CATEGORY_ICON_OPTIONS) {
+			const btn = grid.createEl("button", { cls: "qnb-icon-picker-btn", attr: { type: "button" } });
+			setIcon(btn, opt.value || "slash");
+			btn.setAttr("aria-label", this.tr(opt.labelKey));
+			if ((cat.icon || "") === opt.value) btn.addClass("is-selected");
+			quickButtons.push(btn);
+			btn.addEventListener("click", () => {
+				void (async () => {
+					cat.icon = opt.value;
+					await this.plugin.updateCategoryIcon(cat.name, opt.value);
+					this.renderPreview();
+					highlightQuickMatch(opt.value);
+					customInput.value = "";
+					updateCustomPreview("");
+				})();
+			});
+		}
+
+		const isQuickIcon = CATEGORY_ICON_OPTIONS.some((o) => o.value === (cat.icon || ""));
+		if (!isQuickIcon && cat.icon) customInput.value = cat.icon;
+		updateCustomPreview(customInput.value);
+		customInput.addEventListener("input", () => updateCustomPreview(customInput.value));
+
+		const applyCustom = async () => {
+			const trimmed = customInput.value.trim();
+			if (trimmed === (cat.icon || "")) return;
+			cat.icon = trimmed;
+			await this.plugin.updateCategoryIcon(cat.name, trimmed);
+			this.renderPreview();
+			highlightQuickMatch(trimmed);
+		};
+		customInput.addEventListener("keydown", (evt) => {
+			if (evt.key === "Enter") {
+				evt.preventDefault();
+				void applyCustom();
+			}
+		});
+		customRow
+			.createEl("button", {
+				cls: "qnb-icon-picker-custom-apply",
+				attr: { type: "button" },
+				text: this.tr("settings.categories.iconCustomApply"),
+			})
+			.addEventListener("click", () => void applyCustom());
+
+		// Colore dell'icona: vale sia per le icone rapide sia per quella libera.
+		customPreview.setCssStyles({ color: cat.iconColor || "" });
+		const colorRow = wrapper.createDiv({ cls: "qnb-icon-picker-color-row" });
+		colorRow.createSpan({ cls: "qnb-icon-picker-color-label", text: this.tr("settings.categories.iconColorLabel") });
+		const colorInput = colorRow.createEl("input", { cls: "qnb-icon-picker-color-input", attr: { type: "color" } });
+		colorInput.value = cat.iconColor || "#ffffff";
+		colorInput.addEventListener("input", () => {
+			customPreview.setCssStyles({ color: colorInput.value });
+			this.draft.iconColor = colorInput.value;
+			this.renderPreview();
+		});
+		colorInput.addEventListener("change", () => {
+			void (async () => {
+				await this.plugin.updateCategoryIconColor(cat.name, colorInput.value);
+				delete this.draft.iconColor;
+				this.renderPreview();
+			})();
+		});
+		colorRow
+			.createEl("button", {
+				cls: "qnb-icon-picker-custom-apply",
+				attr: { type: "button" },
+				text: this.tr("settings.categories.titleColorReset"),
+			})
+			.addEventListener("click", () => {
+				void (async () => {
+					await this.plugin.updateCategoryIconColor(cat.name, "");
+					delete this.draft.iconColor;
+					colorInput.value = "#ffffff";
+					customPreview.setCssStyles({ color: "" });
+					this.renderPreview();
+				})();
+			});
+
+		const hintRow = wrapper.createDiv({ cls: "qnb-icon-picker-hint-row" });
+		hintRow.createDiv({ cls: "qnb-icon-picker-hint", text: this.tr("settings.categories.iconCustomHint") });
+		const libraryLinkBtn = hintRow.createEl("button", { cls: "qnb-icon-picker-link-btn", attr: { type: "button" } });
+		setIcon(libraryLinkBtn.createSpan({ cls: "qnb-btn-icon" }), "external-link");
+		libraryLinkBtn.createSpan({ text: this.tr("settings.categories.iconLibraryLink") });
+		libraryLinkBtn.addEventListener("click", () => {
+			window.open("https://lucide.dev/icons/", "_blank");
+		});
+	}
+}
+
+/** Finestra "Etichette": le stesse funzioni dell'elenco etichette delle impostazioni (creare,
+ * rinominare, cambiare colore, riordinare trascinando, eliminare), così si gestiscono
+ * direttamente dalla board. Si salva con la stessa funzione delle impostazioni
+ * (`plugin.setLabels`). Nome e colore salvano quando si conferma (Invio, uscita dal campo,
+ * rilascio del selettore), non a ogni tasto o sfumatura: ogni salvataggio ridisegna la board. */
+export class LabelsManagerModal extends Modal {
+	private plugin: QuickNotesBoardPlugin;
+	private lang: QnbLang;
+	private listEl: HTMLElement | null = null;
+	private draggedId: string | null = null;
+
+	constructor(app: App, plugin: QuickNotesBoardPlugin) {
+		super(app);
+		this.plugin = plugin;
+		this.lang = plugin.settings.language;
+	}
+
+	private tr(key: string, vars?: Record<string, string>): string {
+		return t(this.lang, key, vars);
+	}
+
+	onOpen() {
+		this.plugin.playSound("dialog-label-assign");
+		const { contentEl } = this;
+		contentEl.empty();
+		new Setting(contentEl).setName(this.tr("settings.labels.heading")).setHeading();
+		contentEl.createEl("p", { cls: "setting-item-description", text: this.tr("settings.labels.intro") });
+		this.listEl = contentEl.createDiv({ cls: "qnb-groups-list" });
+		this.renderList();
+		new Setting(contentEl).addButton((btn) => btn.setButtonText(this.tr("trash.close")).onClick(() => this.close()));
 	}
 
 	onClose() {
 		this.contentEl.empty();
+	}
+
+	/** Ridisegna l'elenco; `focusId` è l'etichetta il cui nome va selezionato (appena creata). */
+	private renderList(focusId?: string) {
+		const listEl = this.listEl;
+		if (!listEl) return;
+		listEl.empty();
+
+		for (const label of this.plugin.settings.labels) {
+			const row = new Setting(listEl).setClass("qnb-group-row");
+
+			// Maniglia: si trascina la riga per riordinare, come nelle impostazioni.
+			const handle = createSpan({ cls: "qnb-drag-handle qnb-group-drag-handle" });
+			setIcon(handle, "grip-vertical");
+			row.settingEl.prepend(handle);
+			row.settingEl.addClass("qnb-group-row-draggable");
+			handle.addEventListener("mousedown", () => row.settingEl.setAttribute("draggable", "true"));
+			row.settingEl.addEventListener("dragend", () => {
+				row.settingEl.removeAttribute("draggable");
+				row.settingEl.removeClass("qnb-drag-over");
+			});
+			row.settingEl.addEventListener("dragstart", () => {
+				this.draggedId = label.id;
+			});
+			row.settingEl.addEventListener("dragover", (evt) => {
+				if (this.draggedId === null) return;
+				evt.preventDefault();
+				row.settingEl.addClass("qnb-drag-over");
+			});
+			row.settingEl.addEventListener("dragleave", () => row.settingEl.removeClass("qnb-drag-over"));
+			row.settingEl.addEventListener("drop", (evt) => {
+				void (async () => {
+					evt.preventDefault();
+					row.settingEl.removeClass("qnb-drag-over");
+					const fromId = this.draggedId;
+					this.draggedId = null;
+					if (!fromId || fromId === label.id) return;
+					const current = [...this.plugin.settings.labels];
+					const fromIdx = current.findIndex((l) => l.id === fromId);
+					if (fromIdx === -1) return;
+					const [moved] = current.splice(fromIdx, 1);
+					const toIdx = current.findIndex((l) => l.id === label.id);
+					current.splice(toIdx === -1 ? current.length : toIdx, 0, moved);
+					await this.plugin.setLabels(current);
+					this.renderList();
+				})();
+			});
+
+			// Colore: salva al rilascio del selettore.
+			row.addColorPicker((cp) => {
+				cp.setValue(label.color || "#888888");
+				const el = (cp as unknown as { colorPickerEl: HTMLInputElement }).colorPickerEl;
+				el.addEventListener("change", () => {
+					void this.updateLabel(label.id, { color: el.value });
+				});
+			});
+
+			// Nome: salva quando si conferma. Un nome vuoto torna a quello di prima.
+			let savedName = label.name;
+			row.addText((text) => {
+				text.setValue(label.name);
+				text.inputEl.addEventListener("change", () => {
+					const name = text.inputEl.value.trim();
+					if (!name) {
+						text.inputEl.value = savedName;
+						return;
+					}
+					savedName = name;
+					text.inputEl.value = name;
+					void this.updateLabel(label.id, { name });
+				});
+				if (label.id === focusId) {
+					window.setTimeout(() => {
+						text.inputEl.focus();
+						text.inputEl.select();
+					}, 0);
+				}
+			});
+
+			row.addExtraButton((btn) =>
+				btn
+					.setIcon("trash-2")
+					.setTooltip(this.tr("settings.labels.delete"))
+					.onClick(() => {
+						void (async () => {
+							await this.plugin.setLabels(this.plugin.settings.labels.filter((l) => l.id !== label.id));
+							this.renderList();
+						})();
+					})
+			);
+		}
+
+		new Setting(listEl).addButton((btn) =>
+			btn.setButtonText(this.tr("settings.labels.add")).onClick(() => {
+				void (async () => {
+					const newLabel: QnbLabel = {
+						id: "lbl_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
+						name: this.tr("settings.labels.newName"),
+						color: "#888888",
+					};
+					await this.plugin.setLabels([...this.plugin.settings.labels, newLabel]);
+					this.renderList(newLabel.id);
+				})();
+			})
+		);
+	}
+
+	private async updateLabel(id: string, patch: Partial<QnbLabel>) {
+		await this.plugin.setLabels(this.plugin.settings.labels.map((l) => (l.id === id ? { ...l, ...patch } : l)));
 	}
 }
 
@@ -1623,7 +2330,9 @@ export class DueDateModal extends Modal {
 	private render() {
 		const { contentEl } = this;
 		contentEl.empty();
-		new Setting(contentEl).setName(this.tr("modal.dueDate.title")).setHeading();
+		if (!mountNoteWindowBar(this, this.plugin, this.note.category, this.tr("modal.dueDate.title"))) {
+			new Setting(contentEl).setName(this.tr("modal.dueDate.title")).setHeading();
+		}
 
 		new Setting(contentEl).setName(this.tr("modal.dueDate.dueDateLabel")).addText((text) => {
 			text.inputEl.type = "date";
@@ -2413,7 +3122,9 @@ export class LabelAssignModal extends Modal {
 	private render() {
 		const { contentEl } = this;
 		contentEl.empty();
-		new Setting(contentEl).setName(this.tr("modal.labelAssign.title")).setHeading();
+		if (!mountNoteWindowBar(this, this.plugin, this.note.category, this.tr("modal.labelAssign.title"))) {
+			new Setting(contentEl).setName(this.tr("modal.labelAssign.title")).setHeading();
+		}
 
 		const labels = this.plugin.settings.labels;
 		if (labels.length === 0) {
@@ -2600,7 +3311,10 @@ export class AlarmRingModal extends Modal {
 		const { contentEl } = this;
 		contentEl.empty();
 		contentEl.addClass("qnb-alarm-dialog");
-		this.titleEl.setText(this.tr("snooze.dialog.title"));
+		// Barra con i colori della categoria della nota; senza categoria, il titolo standard.
+		if (!mountNoteWindowBar(this, this.plugin, this.note.category, this.tr("snooze.dialog.title"))) {
+			this.titleEl.setText(this.tr("snooze.dialog.title"));
+		}
 
 		contentEl.createEl("p", { cls: "qnb-alarm-dialog-note", text: this.note.title });
 

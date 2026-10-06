@@ -963,12 +963,15 @@ export default class QuickNotesBoardPlugin extends Plugin {
 		this.refreshOpenViews();
 	}
 
-	async renameCategory(oldName: string, newName: string) {
+	/** Rinomina una categoria e il campo categoria di tutte le sue note. Torna true se la
+	 * rinomina è avvenuta, false se non c'era nulla da fare (nome vuoto o invariato,
+	 * categoria inesistente) o se il nome è già di un'altra categoria. */
+	async renameCategory(oldName: string, newName: string): Promise<boolean> {
 		const trimmed = newName.trim();
-		if (!trimmed || trimmed === oldName) return;
+		if (!trimmed || trimmed === oldName) return false;
 		const cat = this.settings.categories.find((c) => c.name === oldName);
-		if (!cat) return;
-		if (this.settings.categories.some((c) => c.name.toLowerCase() === trimmed.toLowerCase() && c !== cat)) return;
+		if (!cat) return false;
+		if (this.settings.categories.some((c) => c.name.toLowerCase() === trimmed.toLowerCase() && c !== cat)) return false;
 
 		cat.name = trimmed;
 
@@ -983,6 +986,7 @@ export default class QuickNotesBoardPlugin extends Plugin {
 		await this.saveSettings();
 		if (notesChanged) await this.saveNotes();
 		this.refreshOpenViews();
+		return true;
 	}
 
 	async removeCategory(name: string) {

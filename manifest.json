@@ -1,10 +1,13 @@
 {
 	"id": "quick-notes-board",
 	"name": "Quick Notes Board",
-	"version": "1.1.1",
+	"version": "1.1.2",
 	"minAppVersion": "1.13.0",
 	"description": "A desktop board for creating, organizing, and managing quick Markdown notes — categories, groups, labels, alarms, and more — all saved in a single file.",
 	"author": "Alessandro Vettorel",
 	"authorUrl": "",
+	"fundingUrl": {
+		"Buy me a coffee": "https://buy.stripe.com/14A9AU7Io2626QW7t2cjS00"
+	},
 	"isDesktopOnly": false
 }
