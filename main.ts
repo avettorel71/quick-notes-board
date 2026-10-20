@@ -1676,7 +1676,21 @@ export default class QuickNotesBoardPlugin extends Plugin {
 		}
 	}
 
-	async saveNotes() {
+	/** Coda dei salvataggi: uno alla volta, nell'ordine in cui sono stati chiesti. */
+	private saveQueue: Promise<void> = Promise.resolve();
+
+	/** Salva le note. I salvataggi chiesti a breve distanza (fine trascinamento, fine
+	 * ridimensionamento, modifica del testo...) vengono eseguiti uno dopo l'altro: due scritture
+	 * contemporanee del file potrebbero finire in ordine diverso e lasciare su disco la versione
+	 * più vecchia (per esempio una nota che torna alla posizione di prima). Ognuno legge le note
+	 * nel momento in cui tocca a lui, quindi l'ultimo scrive sempre lo stato più recente. */
+	saveNotes(): Promise<void> {
+		const run = this.saveQueue.then(() => this.writeNotesFile());
+		this.saveQueue = run.catch(() => undefined);
+		return run;
+	}
+
+	private async writeNotesFile() {
 		if (this.dataFileCorrupted) {
 			// Non scriviamo mai sopra un file che non siamo riusciti a leggere
 			// correttamente: i dati originali restano intatti sul disco finché il

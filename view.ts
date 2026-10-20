@@ -2,9 +2,10 @@ import { ItemView, WorkspaceLeaf, MarkdownRenderer, Menu, setIcon, Notice } from
 import type QuickNotesBoardPlugin from "./main";
 import type { QuickNote } from "./main";
 import { DEFAULT_FONT_SIZE, DEFAULT_FONT_FAMILY, DEFAULT_FONT_COLOR, DEFAULT_BG_COLOR, FONT_FAMILY_CSS, getContrastTextColor } from "./main";
-import { NewNoteModal, LabelsManagerModal, ChangeCategoryModal, FontSizeModal, TrashModal, ArchiveModal, LockPasswordModal, NoteInfoModal, CategoryStatsModal, BoardInfoModal, BoardActivityModal, DueDateModal, AlarmListModal, NoteExplorerModal, BoardStructureModal, LabelAssignModal } from "./modal";
+import { NewNoteModal, LabelsManagerModal, ChangeCategoryModal, FontSizeModal, TrashModal, ArchiveModal, LockPasswordModal, NoteInfoModal, CategoryStatsModal, BoardInfoModal, BoardActivityModal, DueDateModal, AlarmListModal, NoteExplorerModal, BoardStructureModal, LabelAssignModal, TableEditModal } from "./modal";
 import { t } from "./i18n";
 import type { QnbCategory, QnbGroup, QnbNoteIconId } from "./settings";
+import { findTables, isEditableSize, replaceTableInContent } from "./tables";
 import { encryptText, decryptText, DecryptionError } from "./crypto";
 import { SNOOZE_OPTIONS_MINUTES, formatSnoozeLabel, normalizeSnoozeMinutes } from "./snooze";
 
@@ -14,6 +15,9 @@ export class QuickNotesBoardView extends ItemView {
 	plugin: QuickNotesBoardPlugin;
 
 	private boardEl!: HTMLElement;
+
+	/** Chiude il gesto di spostamento/ridimensionamento in corso, se c'è (vedi bindPointerCapture). */
+	private endActiveGesture: (() => void) | null = null;
 
 	private dragState: {
 		note: QuickNote;
@@ -171,12 +175,18 @@ export class QuickNotesBoardView extends ItemView {
 		// riquadro di selezione multipla (se si trascina) o deseleziona tutto (se è solo
 		// un click, senza trascinamento).
 		this.boardEl.addEventListener("mousedown", (evt) => {
+			// Solo il tasto sinistro: con il destro (menu) o il centrale non parte alcun riquadro,
+			// che altrimenti resterebbe a metà perché il rilascio lo prende il menu.
+			if (evt.button !== 0) return;
 			if (evt.target !== this.boardEl) return;
 			this.boardEl.querySelectorAll(".qnb-note.is-editing").forEach((el) => {
 				el.dispatchEvent(new Event("qnb-force-blur"));
 			});
 			this.startMarqueeSelection(evt);
 		});
+
+		// Un menu contestuale sulla board chiude qualunque gesto lasciato a metà.
+		this.boardEl.addEventListener("contextmenu", () => this.endActiveGesture?.());
 
 		this.renderBoard();
 	}
@@ -1152,6 +1162,7 @@ export class QuickNotesBoardView extends ItemView {
 	 * tenendo premuto Ctrl/Cmd/Shift, il riquadro si aggiunge alla selezione attuale
 	 * invece di sostituirla. */
 	private startMarqueeSelection(evt: MouseEvent) {
+		this.endActiveGesture?.(); // mai due gesti insieme: chiude quello rimasto a metà
 		const boardRect = this.boardEl.getBoundingClientRect();
 		const startX = evt.clientX - boardRect.left + this.boardEl.scrollLeft;
 		const startY = evt.clientY - boardRect.top + this.boardEl.scrollTop;
@@ -1168,6 +1179,10 @@ export class QuickNotesBoardView extends ItemView {
 		let moved = false;
 
 		const onMove = (moveEvt: MouseEvent) => {
+			if (moveEvt.buttons === 0) {
+				onUp(); // mouseup perso: chiude il riquadro di selezione
+				return;
+			}
 			if (!this.marqueeStart || !this.marqueeEl) return;
 			const curX = moveEvt.clientX - boardRect.left + this.boardEl.scrollLeft;
 			const curY = moveEvt.clientY - boardRect.top + this.boardEl.scrollTop;
@@ -1185,6 +1200,7 @@ export class QuickNotesBoardView extends ItemView {
 		const onUp = () => {
 			window.removeEventListener("mousemove", onMove);
 			window.removeEventListener("mouseup", onUp);
+			this.endActiveGesture = null;
 
 			if (this.marqueeEl) {
 				const rect = {
@@ -1218,7 +1234,10 @@ export class QuickNotesBoardView extends ItemView {
 		};
 
 		window.addEventListener("mousemove", onMove);
-		window.addEventListener("mouseup", () => void onUp());
+		// Stessa funzione che onUp rimuove: con un'altra funzione anonima il listener non verrebbe
+		// mai tolto e si accumulerebbe a ogni selezione.
+		window.addEventListener("mouseup", onUp);
+		this.endActiveGesture = onUp;
 	}
 
 	/** Aggiorna solo la classe "selezionata" sulle note già a schermo, senza ridisegnare
@@ -2003,6 +2022,7 @@ export class QuickNotesBoardView extends ItemView {
 			// nota è cifrata (serve la password, dal pulsante lucchetto).
 			if ((evt.target as HTMLElement).closest("a")) return;
 			if ((evt.target as HTMLElement).closest(".qnb-image-resize-handle")) return;
+			if ((evt.target as HTMLElement).closest(".qnb-table-edit-btn")) return;
 			if (note.encrypted) return;
 			const clickOffset = this.getClickOffsetInRenderedBody(bodyEl, evt.clientX, evt.clientY, note.content);
 			this.enterEditMode(noteEl, bodyEl, note, toggleModeBtn, clickOffset ?? undefined);
@@ -2012,6 +2032,7 @@ export class QuickNotesBoardView extends ItemView {
 			if ((evt.target as HTMLElement).closest("a")) return;
 			if ((evt.target as HTMLElement).closest(".qnb-image-resize-handle")) return;
 			if ((evt.target as HTMLElement).closest('input[type="checkbox"]')) return;
+			if ((evt.target as HTMLElement).closest(".qnb-table-edit-btn")) return;
 			if (note.encrypted) return;
 			const clickOffset = this.getClickOffsetInRenderedBody(bodyEl, evt.clientX, evt.clientY, note.content);
 			this.enterEditMode(noteEl, bodyEl, note, toggleModeBtn, clickOffset ?? undefined);
@@ -2022,6 +2043,7 @@ export class QuickNotesBoardView extends ItemView {
 		});
 
 		// Drag dalla testata
+		this.bindPointerCapture(header, [".qnb-note-actions", ".qnb-note-title-input"]);
 		header.addEventListener("mousedown", (evt: MouseEvent) => this.startDrag(evt, note, noteEl));
 		header.addEventListener("contextmenu", (evt: MouseEvent) => {
 			evt.preventDefault();
@@ -2072,10 +2094,18 @@ export class QuickNotesBoardView extends ItemView {
 				// L'elemento potrebbe essere stato rimosso nel frattempo (es. cambio filtro
 				// o nota eliminata): in tal caso ignora, per non salvare una dimensione 0x0.
 				if (!noteEl.isConnected) return;
-				const rect = noteEl.getBoundingClientRect();
-				if (rect.width < 10 || rect.height < 10) return;
-				note.w = rect.width;
-				note.h = rect.height;
+				// Da massimizzata la dimensione è quella della board, imposta dal CSS: non è la
+				// dimensione della nota e non va salvata.
+				if (noteEl.hasClass("qnb-note-maximized")) return;
+				// Dimensione di layout (offsetWidth/Height): a differenza di getBoundingClientRect
+				// non risente delle trasformazioni (rimbalzo di fine trascinamento, sollevamento).
+				const w = noteEl.offsetWidth;
+				const h = noteEl.offsetHeight;
+				if (w < 10 || h < 10) return;
+				// Nessun cambiamento reale: niente salvataggio (scatta anche alla prima osservazione).
+				if (Math.round(note.w) === w && Math.round(note.h) === h) return;
+				note.w = w;
+				note.h = h;
 				await this.plugin.saveNotes();
 			}, 300);
 		});
@@ -2091,6 +2121,7 @@ export class QuickNotesBoardView extends ItemView {
 		// mousedown venga eseguito. Aggiornandolo solo al click si rischia quindi di
 		// afferrare per errore la maniglia della nota sottostante invece di quella attiva.
 		handle.addEventListener("mouseenter", () => this.bringToFront(note, noteEl));
+		this.bindPointerCapture(handle, []);
 		handle.addEventListener("mousedown", (evt: MouseEvent) => this.startResize(evt, note, noteEl, dir, handle));
 	}
 
@@ -2107,6 +2138,7 @@ export class QuickNotesBoardView extends ItemView {
 		// si modificherebbero w/h salvati senza che si veda alcun cambiamento reale.
 		if (this.maximizedNoteId === note.id) return;
 
+		this.endActiveGesture?.(); // mai due gesti insieme
 		const MIN_W = 180;
 		const MIN_H = 120;
 		const startX = evt.clientX;
@@ -2123,6 +2155,10 @@ export class QuickNotesBoardView extends ItemView {
 		noteEl.addClass("is-dragging");
 
 		const onMove = (moveEvt: MouseEvent) => {
+			if (moveEvt.buttons === 0) {
+				onUp(); // mouseup perso: chiude il ridimensionamento
+				return;
+			}
 			const dx = moveEvt.clientX - startX;
 			const dy = moveEvt.clientY - startY;
 
@@ -2130,9 +2166,11 @@ export class QuickNotesBoardView extends ItemView {
 				note.w = Math.max(MIN_W, origW + dx);
 			}
 			if (resizeLeft) {
-				const newW = Math.max(MIN_W, origW - dx);
+				// Il bordo destro resta fermo: allargando oltre il bordo sinistro della board la
+				// larghezza si ferma lì, invece di far crescere la nota verso destra.
+				const newW = Math.min(Math.max(MIN_W, origW - dx), Math.max(MIN_W, origX + origW));
 				note.w = newW;
-				note.x = Math.max(0, origX + (origW - newW));
+				note.x = Math.max(0, origX + origW - newW);
 			}
 			if (resizeBottom) {
 				note.h = Math.max(MIN_H, origH + dy);
@@ -2147,6 +2185,7 @@ export class QuickNotesBoardView extends ItemView {
 		const onUp = () => {
 			window.removeEventListener("mousemove", onMove);
 			window.removeEventListener("mouseup", onUp);
+			this.endActiveGesture = null;
 			handle.removeClass("is-resizing");
 			noteEl.removeClass("is-dragging");
 			void this.plugin.saveNotes();
@@ -2154,6 +2193,7 @@ export class QuickNotesBoardView extends ItemView {
 
 		window.addEventListener("mousemove", onMove);
 		window.addEventListener("mouseup", onUp);
+		this.endActiveGesture = onUp;
 	}
 
 	private startTitleEdit(titleEl: HTMLElement, note: QuickNote) {
@@ -2270,6 +2310,67 @@ export class QuickNotesBoardView extends ItemView {
 		this.updateMaximizeIcon(btn, this.maximizedNoteId === note.id);
 	}
 
+	/** Sopra ogni tabella della nota mette il pulsante "Modifica tabella" e applica il colore
+	 * della prima riga. Le tabelle a schermo si abbinano a quelle del testo per ordine; se i due
+	 * conteggi non coincidono (tabella dentro una citazione o un elenco, per esempio) non si
+	 * aggiunge nulla, per non rischiare di modificare la tabella sbagliata. */
+	private decorateTables(renderEl: HTMLElement, note: QuickNote, bodyEl: HTMLElement, noteEl: HTMLElement, toggleBtn: HTMLElement) {
+		// Mai far fallire il disegno della nota per colpa di questa funzione accessoria.
+		try {
+			this.decorateTablesUnsafe(renderEl, note, bodyEl, noteEl, toggleBtn);
+		} catch (err) {
+			console.error("Quick Notes Board: tabelle", err);
+		}
+	}
+
+	private decorateTablesUnsafe(renderEl: HTMLElement, note: QuickNote, bodyEl: HTMLElement, noteEl: HTMLElement, toggleBtn: HTMLElement) {
+		if (!renderEl.isConnected || note.encrypted) return;
+		const domTables = Array.from(renderEl.querySelectorAll("table"));
+		if (domTables.length === 0) return;
+		const parsed = findTables(note.content);
+		if (parsed.length !== domTables.length) return;
+
+		domTables.forEach((tableEl, index) => {
+			const info = parsed[index];
+			// Già decorata (render ripetuto sullo stesso elemento): non raddoppiare il pulsante.
+			if (tableEl.previousElementSibling?.classList.contains("qnb-table-edit-bar")) return;
+			if (info.headerColor) {
+				const textColor = getContrastTextColor(info.headerColor);
+				tableEl.querySelectorAll<HTMLElement>("thead th").forEach((th) => {
+					th.setCssStyles({ backgroundColor: info.headerColor, color: textColor });
+				});
+			}
+			// Tabelle enormi: il colore sì, la griglia no (sarebbe lenta); si modificano come testo.
+			if (!isEditableSize(info)) return;
+			const bar = createDiv({ cls: "qnb-table-edit-bar" });
+			const btn = bar.createEl("button", { cls: "qnb-table-edit-btn clickable-icon" });
+			setIcon(btn, "table");
+			btn.setAttribute("aria-label", this.tr("view.table.edit"));
+			// Solo l'icona è "sua": un click di fianco, sulla stessa riga, entra in modifica come
+			// ovunque nella nota.
+			for (const type of ["click", "dblclick", "mousedown"]) {
+				btn.addEventListener(type, (evt) => evt.stopPropagation());
+			}
+			btn.addEventListener("click", (evt) => {
+				evt.preventDefault();
+				const current = findTables(note.content)[index];
+				if (!current) return;
+				new TableEditModal(this.app, this.plugin, note.category, current, (edited) => {
+					void (async () => {
+						const updated = replaceTableInContent(note.content, index, edited);
+						if (updated === null || updated === note.content) return;
+						note.content = updated;
+						note.modifiedAt = Date.now();
+						this.plugin.recordNoteModified(note.id);
+						await this.plugin.saveNotes();
+						this.renderNoteBodyPreview(bodyEl, note, noteEl, toggleBtn);
+					})();
+				}).open();
+			});
+			tableEl.before(bar);
+		});
+	}
+
 	private renderNoteBodyPreview(bodyEl: HTMLElement, note: QuickNote, noteEl: HTMLElement, toggleBtn: HTMLElement) {
 		this.setEditToggleIcon(toggleBtn, false);
 		bodyEl.empty();
@@ -2289,7 +2390,9 @@ export class QuickNotesBoardView extends ItemView {
 			return;
 		}
 		const renderEl = bodyEl.createDiv({ cls: "qnb-note-rendered markdown-rendered" });
-		void MarkdownRenderer.render(this.app, note.content, renderEl, "", this);
+		void MarkdownRenderer.render(this.app, note.content, renderEl, "", this).then(() => {
+			this.decorateTables(renderEl, note, bodyEl, noteEl, toggleBtn);
+		});
 
 		// Link interni [[...]]: click per navigare, hover per l'anteprima (come nelle note normali).
 		renderEl.addEventListener("click", (evt) => {
@@ -2535,6 +2638,11 @@ export class QuickNotesBoardView extends ItemView {
 			return { raw: blockEnd - state.rawPos, found: node.contains(targetNode) ? blockStart - state.rawPos : null };
 		}
 
+		// Il pulsante "Modifica tabella" non esiste nel testo grezzo: non conta.
+		if (node.nodeType === Node.ELEMENT_NODE && (node as HTMLElement).classList.contains("qnb-table-edit-bar")) {
+			return { raw: 0, found: null };
+		}
+
 		if (node === targetNode) {
 			return { raw: 0, found: node.nodeType === Node.TEXT_NODE ? targetOffsetInNode : 0 };
 		}
@@ -2547,6 +2655,14 @@ export class QuickNotesBoardView extends ItemView {
 
 		const el = node as HTMLElement;
 		const tag = el.tagName;
+
+		// Il commento col colore della prima riga sta nel testo grezzo sopra la tabella ma non
+		// si vede a schermo: lo si salta, così il cursore non slitta.
+		let tableCommentSkip = 0;
+		if (tag === "TABLE") {
+			const m = /^\n*[ \t]*<!--\s*qnb-table\b[^\n]*?-->[ \t]*/.exec(state.rawContent.slice(state.rawPos));
+			if (m) tableCommentSkip = m[0].length + (state.sawLine ? 0 : 1);
+		}
 
 		if (tag === "BR") {
 			// Interruzione di riga dentro lo stesso blocco (es. paragrafo con "a capo
@@ -2569,7 +2685,7 @@ export class QuickNotesBoardView extends ItemView {
 		const isFencedCode = tag === "CODE" && el.parentElement?.tagName === "PRE";
 		const inlineDelim = tag === "CODE" && !isFencedCode ? 1 : QuickNotesBoardView.INLINE_DELIM_LENGTH[tag];
 
-		let prefix = inlineDelim || 0;
+		let prefix = (inlineDelim || 0) + tableCommentSkip;
 
 		if (QuickNotesBoardView.BLOCK_LINE_TAGS.has(tag)) {
 			// L'a capo precede l'inizio del blocco, non lo segue: non contarlo prima del
@@ -2838,6 +2954,27 @@ export class QuickNotesBoardView extends ItemView {
 		}, 0);
 	}
 
+	/** Durante uno spostamento o un ridimensionamento il mouse resta "agganciato" all'elemento
+	 * premuto: i movimenti continuano ad arrivare anche fuori dalla board o dalla finestra, e se il
+	 * sistema si prende il gesto (bordo della finestra, barra del titolo, un altro pannello) il gesto
+	 * si chiude da solo invece di restare a metà, con la nota attaccata al cursore. Non si aggancia
+	 * quando si preme su un pulsante o su un campo (`skip`), per non toccare i loro click. */
+	private bindPointerCapture(el: HTMLElement, skip: string[]) {
+		el.addEventListener("pointerdown", (evt: PointerEvent) => {
+			if (evt.button !== 0 || evt.ctrlKey || evt.metaKey) return;
+			const target = evt.target as HTMLElement;
+			if (skip.some((sel) => target.closest(sel))) return;
+			try {
+				el.setPointerCapture(evt.pointerId);
+			} catch {
+				// non disponibile: resta il comportamento di sempre
+			}
+		});
+		const end = () => this.endActiveGesture?.();
+		el.addEventListener("pointercancel", end);
+		el.addEventListener("lostpointercapture", end);
+	}
+
 	private startDrag(evt: MouseEvent, note: QuickNote, noteEl: HTMLElement) {
 		// ignora click sui pulsanti azione (rinomina/elimina) o su un titolo in modifica
 		if ((evt.target as HTMLElement).closest(".qnb-note-actions")) return;
@@ -2867,6 +3004,7 @@ export class QuickNotesBoardView extends ItemView {
 		}
 
 		evt.preventDefault();
+		this.endActiveGesture?.(); // mai due gesti insieme
 
 		const groupExtras: { note: QuickNote; el: HTMLElement; origX: number; origY: number }[] = [];
 		if (isGroupDrag) {
@@ -2892,13 +3030,26 @@ export class QuickNotesBoardView extends ItemView {
 		noteEl.addClass("is-dragging");
 		for (const extra of groupExtras) extra.el.addClass("is-dragging");
 
+		// La nota non esce del tutto dall'area visibile della board: ne restano sempre in vista
+		// almeno 80 px in larghezza e 40 in altezza. Una nota già più lontana di così non viene
+		// riportata indietro di colpo. Calcolati una volta sola: leggerli a ogni movimento
+		// costringerebbe il browser a ricalcolare l'impaginazione ogni volta.
+		const limitX = this.boardEl.scrollLeft + this.boardEl.clientWidth - 80;
+		const limitY = this.boardEl.scrollTop + this.boardEl.clientHeight - 40;
+
 		const onMove = (moveEvt: MouseEvent) => {
+			// Tasto rilasciato senza che sia arrivato il mouseup (rilasciato sopra un'altra
+			// finestra o un menu): chiude lo spostamento invece di lasciare la nota attaccata al mouse.
+			if (moveEvt.buttons === 0) {
+				onUp();
+				return;
+			}
 			if (!this.dragState) return;
 			const dx = moveEvt.clientX - this.dragState.startX;
 			const dy = moveEvt.clientY - this.dragState.startY;
 
-			const newX = Math.max(0, this.dragState.origX + dx);
-			const newY = Math.max(0, this.dragState.origY + dy);
+			const newX = Math.min(Math.max(0, this.dragState.origX + dx), Math.max(limitX, this.dragState.origX));
+			const newY = Math.min(Math.max(0, this.dragState.origY + dy), Math.max(limitY, this.dragState.origY));
 			this.dragState.note.x = newX;
 			this.dragState.note.y = newY;
 			// Stessa variabile CSS usata dal ridimensionamento e dal render iniziale (non
@@ -2912,8 +3063,8 @@ export class QuickNotesBoardView extends ItemView {
 			// Trascinamento di gruppo: stessa quantità di spostamento per tutte le altre
 			// note selezionate, ognuna dalla propria posizione di partenza.
 			for (const extra of this.dragState.groupExtras) {
-				const exX = Math.max(0, extra.origX + dx);
-				const exY = Math.max(0, extra.origY + dy);
+				const exX = Math.min(Math.max(0, extra.origX + dx), Math.max(limitX, extra.origX));
+				const exY = Math.min(Math.max(0, extra.origY + dy), Math.max(limitY, extra.origY));
 				extra.note.x = exX;
 				extra.note.y = exY;
 				extra.el.setCssProps({ "--qnb-note-x": `${exX}px` });
@@ -2924,6 +3075,7 @@ export class QuickNotesBoardView extends ItemView {
 		const onUp = () => {
 			window.removeEventListener("mousemove", onMove);
 			window.removeEventListener("mouseup", onUp);
+			this.endActiveGesture = null;
 			noteEl.removeClass("is-dragging");
 			for (const extra of this.dragState?.groupExtras ?? []) extra.el.removeClass("is-dragging");
 
@@ -2940,6 +3092,7 @@ export class QuickNotesBoardView extends ItemView {
 
 		window.addEventListener("mousemove", onMove);
 		window.addEventListener("mouseup", onUp);
+		this.endActiveGesture = onUp;
 	}
 
 	/** Riproduce il piccolo "assestamento elastico" su una nota appena rilasciata dal

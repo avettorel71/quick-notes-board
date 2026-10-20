@@ -11,6 +11,8 @@ import type { QuickNote, QnbFontFamily } from "./main";
 import { getContrastTextColor } from "./main";
 import { t, QnbLang } from "./i18n";
 import { SNOOZE_OPTIONS_MINUTES, formatClock, formatSnoozeLabel, normalizeSnoozeMinutes } from "./snooze";
+import { cloneTable, deleteColumn, deleteRow, insertColumn, insertRow, moveColumn, moveRow } from "./tables";
+import type { QnbTable } from "./tables";
 
 /** Colora le <option> di un <select> categoria con lo stesso colore configurato per quella categoria. */
 function colorizeCategoryOptions(selectEl: HTMLSelectElement, categories: QnbCategory[]) {
@@ -1028,6 +1030,260 @@ function mountNoteWindowBar(modal: Modal, plugin: QuickNotesBoardPlugin, categor
 	modal.modalEl.querySelector(":scope > .qnb-category-title-bar")?.remove();
 	renderCategoryBar(mountCategoryBar(modal.modalEl), cat, title);
 	return true;
+}
+
+/** Finestra a griglia per modificare una tabella Markdown di una nota: celle, righe e colonne
+ * (aggiungi, sposta, elimina) e colore della prima riga. Lavora su una copia: la tabella della
+ * nota cambia solo con "Salva tabella". */
+export class TableEditModal extends Modal {
+	private plugin: QuickNotesBoardPlugin;
+	private lang: QnbLang;
+	private categoryName: string | undefined;
+	private table: QnbTable;
+	private onSave: (table: QnbTable) => void;
+	private selRow = 0;
+	private selCol = 0;
+	private gridWrap!: HTMLElement;
+	private infoEl!: HTMLElement;
+	private colorPicker: ColorComponent | null = null;
+
+	constructor(
+		app: App,
+		plugin: QuickNotesBoardPlugin,
+		categoryName: string | undefined,
+		table: QnbTable,
+		onSave: (table: QnbTable) => void
+	) {
+		super(app);
+		this.plugin = plugin;
+		this.lang = plugin.settings.language;
+		this.categoryName = categoryName;
+		this.table = cloneTable(table);
+		this.onSave = onSave;
+	}
+
+	private tr(key: string, vars?: Record<string, string>): string {
+		return t(this.lang, key, vars);
+	}
+
+	onOpen() {
+		const { contentEl } = this;
+		contentEl.empty();
+		this.modalEl.addClass("qnb-table-edit-modal");
+		if (!mountNoteWindowBar(this, this.plugin, this.categoryName, this.tr("modal.tableEdit.title"))) {
+			new Setting(contentEl).setName(this.tr("modal.tableEdit.title")).setHeading();
+		}
+		contentEl.createEl("p", { cls: "setting-item-description", text: this.tr("modal.tableEdit.desc") });
+
+		const colorSetting = new Setting(contentEl).setName(this.tr("modal.tableEdit.headerColor"));
+		colorSetting.addColorPicker((cp) => {
+			this.colorPicker = cp;
+			cp.setValue(this.table.headerColor || "#4a90d9");
+			cp.onChange((value) => {
+				this.table.headerColor = value;
+				this.applyHeaderColor();
+			});
+		});
+		colorSetting.addButton((btn) =>
+			btn.setButtonText(this.tr("modal.tableEdit.headerColorReset")).onClick(() => {
+				this.table.headerColor = "";
+				this.colorPicker?.setValue("#4a90d9");
+				this.applyHeaderColor();
+			})
+		);
+
+		this.gridWrap = contentEl.createDiv({ cls: "qnb-table-edit-scroll" });
+
+		this.infoEl = contentEl.createEl("p", { cls: "setting-item-description qnb-table-edit-info" });
+
+		new Setting(contentEl)
+			.addButton((btn) => btn.setButtonText(this.tr("modal.tableEdit.cancel")).onClick(() => this.close()))
+			.addButton((btn) =>
+				btn
+					.setButtonText(this.tr("modal.tableEdit.save"))
+					.setCta()
+					.onClick(() => {
+						this.onSave(cloneTable(this.table));
+						this.close();
+					})
+			);
+
+		this.renderGrid();
+		this.addResizeGrip();
+	}
+
+	/** Maniglia in basso a destra: allarga e allunga la finestra, e la griglia prende lo spazio
+	 * in più. La finestra è centrata, quindi per seguire il mouse il cambio di misura è doppio. */
+	private addResizeGrip() {
+		const grip = this.modalEl.createDiv({ cls: "qnb-table-edit-grip" });
+		grip.addEventListener("mousedown", (evt) => {
+			evt.preventDefault();
+			evt.stopPropagation();
+			const startX = evt.clientX;
+			const startY = evt.clientY;
+			const startW = this.modalEl.offsetWidth;
+			const startH = this.modalEl.offsetHeight;
+			const maxW = Math.floor(window.innerWidth * 0.98);
+			const maxH = Math.floor(window.innerHeight * 0.96);
+			this.modalEl.addClass("is-resized");
+
+			const onMove = (moveEvt: MouseEvent) => {
+				// Tasto rilasciato fuori dalla finestra senza mouseup: chiude il gesto.
+				if (moveEvt.buttons === 0) {
+					onUp();
+					return;
+				}
+				const w = Math.min(Math.max(480, startW + (moveEvt.clientX - startX) * 2), maxW);
+				const h = Math.min(Math.max(400, startH + (moveEvt.clientY - startY) * 2), maxH);
+				this.modalEl.setCssStyles({ width: `${w}px`, height: `${h}px` });
+			};
+			const onUp = () => {
+				window.removeEventListener("mousemove", onMove);
+				window.removeEventListener("mouseup", onUp);
+			};
+			window.addEventListener("mousemove", onMove);
+			window.addEventListener("mouseup", onUp);
+		});
+	}
+
+	private iconButton(parent: HTMLElement, icon: string, label: string, disabled: boolean, onClick: () => void) {
+		const btn = parent.createEl("button", { cls: "qnb-table-edit-icon-btn clickable-icon" });
+		setIcon(btn, icon);
+		btn.setAttribute("aria-label", label);
+		btn.disabled = disabled;
+		btn.addEventListener("click", (evt) => {
+			evt.preventDefault();
+			onClick();
+		});
+	}
+
+	private renderGrid(focus?: { r: number; c: number }) {
+		this.gridWrap.empty();
+		const cols = this.table.header.length;
+		const rowCount = this.table.rows.length + 1;
+		this.selCol = Math.max(0, Math.min(this.selCol, cols - 1));
+		this.selRow = Math.max(0, Math.min(this.selRow, rowCount - 1));
+
+		const grid = this.gridWrap.createEl("table", { cls: "qnb-table-edit-grid" });
+
+		const ctlRow = grid.createEl("tr");
+		ctlRow.createEl("td");
+		for (let c = 0; c < cols; c++) {
+			const td = ctlRow.createEl("td", { cls: "qnb-table-edit-ctl" });
+			this.iconButton(td, "arrow-left", this.tr("modal.tableEdit.moveLeft"), c === 0, () => {
+				moveColumn(this.table, c, -1);
+				this.selCol = c - 1;
+				this.renderGrid({ r: this.selRow, c: this.selCol });
+			});
+			this.iconButton(td, "arrow-right", this.tr("modal.tableEdit.moveRight"), c === cols - 1, () => {
+				moveColumn(this.table, c, 1);
+				this.selCol = c + 1;
+				this.renderGrid({ r: this.selRow, c: this.selCol });
+			});
+			this.iconButton(td, "x", this.tr("modal.tableEdit.deleteCol"), cols <= 1, () => {
+				deleteColumn(this.table, c);
+				this.selCol = Math.min(c, this.table.header.length - 1);
+				this.renderGrid({ r: this.selRow, c: this.selCol });
+			});
+			this.iconButton(td, "plus", this.tr("modal.tableEdit.insertColAfter"), false, () => {
+				insertColumn(this.table, c + 1);
+				this.selCol = c + 1;
+				this.renderGrid({ r: this.selRow, c: this.selCol });
+			});
+		}
+
+		for (let r = 0; r < rowCount; r++) {
+			const tr = grid.createEl("tr");
+			const ctl = tr.createEl("td", { cls: "qnb-table-edit-ctl" });
+			if (r >= 1) {
+				this.iconButton(ctl, "arrow-up", this.tr("modal.tableEdit.moveUp"), r === 1, () => {
+					moveRow(this.table, r, -1);
+					this.selRow = r - 1;
+					this.renderGrid({ r: this.selRow, c: this.selCol });
+				});
+				this.iconButton(ctl, "arrow-down", this.tr("modal.tableEdit.moveDown"), r === rowCount - 1, () => {
+					moveRow(this.table, r, 1);
+					this.selRow = r + 1;
+					this.renderGrid({ r: this.selRow, c: this.selCol });
+				});
+				this.iconButton(ctl, "x", this.tr("modal.tableEdit.deleteRow"), false, () => {
+					deleteRow(this.table, r);
+					this.selRow = Math.min(r, this.table.rows.length);
+					this.renderGrid({ r: this.selRow, c: this.selCol });
+				});
+			} else {
+				// L'intestazione non si sposta né si elimina: tre posti vuoti tengono il "+" allineato.
+				for (let i = 0; i < 3; i++) ctl.createSpan({ cls: "qnb-table-edit-ctl-spacer" });
+			}
+			this.iconButton(ctl, "plus", this.tr("modal.tableEdit.insertRowBelow"), false, () => {
+				insertRow(this.table, r + 1);
+				this.selRow = r + 1;
+				this.renderGrid({ r: this.selRow, c: this.selCol });
+			});
+			for (let c = 0; c < cols; c++) {
+				const td = tr.createEl("td");
+				const input = td.createEl("input", {
+					type: "text",
+					cls: r === 0 ? "qnb-table-edit-cell qnb-table-edit-head" : "qnb-table-edit-cell",
+				});
+				input.dataset.r = String(r);
+				input.dataset.c = String(c);
+				input.value = r === 0 ? this.table.header[c] : this.table.rows[r - 1][c];
+				input.addEventListener("input", () => {
+					if (r === 0) this.table.header[c] = input.value;
+					else this.table.rows[r - 1][c] = input.value;
+				});
+				input.addEventListener("focus", () => {
+					this.selRow = r;
+					this.selCol = c;
+					this.updateSelection();
+				});
+				input.addEventListener("keydown", (evt) => {
+					if (evt.key !== "Enter") return;
+					evt.preventDefault();
+					this.focusCell(Math.min(r + 1, rowCount - 1), c);
+				});
+			}
+		}
+
+		this.applyHeaderColor();
+		this.updateSelection();
+		if (focus) this.focusCell(focus.r, focus.c);
+	}
+
+	private focusCell(r: number, c: number) {
+		const input = this.gridWrap.querySelector<HTMLInputElement>(`input[data-r="${r}"][data-c="${c}"]`);
+		if (input) input.focus();
+	}
+
+	/** Evidenzia riga e colonna della cella selezionata e aggiorna la scritta sotto la griglia. */
+	private updateSelection() {
+		this.gridWrap.querySelectorAll<HTMLInputElement>("input[data-r]").forEach((input) => {
+			const r = Number(input.dataset.r);
+			const c = Number(input.dataset.c);
+			input.toggleClass("qnb-table-edit-in-sel", r === this.selRow || c === this.selCol);
+			input.toggleClass("qnb-table-edit-active", r === this.selRow && c === this.selCol);
+		});
+		const rowLabel =
+			this.selRow === 0
+				? this.tr("modal.tableEdit.selectionHeader")
+				: this.tr("modal.tableEdit.selectionRow", { n: String(this.selRow) });
+		this.infoEl.setText(this.tr("modal.tableEdit.selection", { col: String(this.selCol + 1), row: rowLabel }));
+	}
+
+	private applyHeaderColor() {
+		const color = this.table.headerColor;
+		this.gridWrap.querySelectorAll<HTMLInputElement>("input.qnb-table-edit-head").forEach((input) => {
+			input.setCssStyles({
+				backgroundColor: color || "",
+				color: color ? getContrastTextColor(color) : "",
+			});
+		});
+	}
+
+	onClose() {
+		this.contentEl.empty();
+	}
 }
 
 export class CategoryStatsModal extends Modal {

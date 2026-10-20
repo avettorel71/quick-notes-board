@@ -163,10 +163,50 @@ The note's body supports the same Markdown as regular Obsidian notes:
 - **Bold** and *italic* (shortcuts **Ctrl/Cmd+B** and **Ctrl/Cmd+I** while editing).
 - **Internal links** `[[note name]]`: clickable (open the note; Ctrl/Cmd+click opens it in a new tab) with hover preview, just like in a regular note. While editing, typing `[[` (or **Ctrl/Cmd+K**) opens an **autocomplete** suggester that combines matching vault notes and other quick notes on the board — picking a quick note inserts a special link that, when clicked, brings that note into view and highlights it (even if it was hidden or archived).
 - **Embedded images** `![[image.jpg]]`, resizable by dragging a handle on their corner.
-- **Tables**, with borders and a highlighted header row; they resize correctly when you change the note's font size.
+- **Tables**, with borders and a highlighted header row; they resize correctly when you change the note's font size, and can be edited as a grid with a button, see [Editing tables](#editing-tables).
 - **Checkboxes** `- [ ]`: clickable, and the click genuinely updates and saves the note's text. A **progress bar** can optionally be shown above each checklist, with a customizable color gradient and a distinct color/text once it reaches 100%.
 
 While editing, the text stays a plain editable area (no live formatting as you type), to keep it light and reliable; once you leave editing mode, everything renders correctly.
+
+### Editing tables
+
+Above every table in a note's preview there is a small **table icon** (left-aligned, a little faded until you point at it). Click it to open the table editor: a window with only that table, shown as a grid. The rest of the note does not appear, and the window has the title bar of the note's category, like the other note windows. The icon is not shown on locked notes, and not on very large tables (over 4000 cells): edit those in text mode.
+
+![Table editor screenshot](Screenshot08.jpg)
+
+**The window, button by button**
+
+| Where | Button | What it does |
+|---|---|---|
+| Top | **First row color** (color picker) | Colors the header row. The text color adjusts automatically for contrast. |
+| Top | **No color** | Removes the header color. |
+| Above each column | **◀** / **▶** | Moves that column left / right. Disabled on the first / last column. |
+| Above each column | **✕** | Deletes that column. Disabled when it is the only one left. |
+| Above each column | **+** | Inserts an empty column to the right of that column. |
+| Beside each row | **↑** / **↓** | Moves that row up / down. Disabled on the first / last row of data. |
+| Beside each row | **✕** | Deletes that row. |
+| Beside each row | **+** | Inserts an empty row right below it. On the header row it adds the first row of data. |
+| Bottom right corner | handle | Drag it to make the window wider or taller; the grid takes the extra space, which is handy for wide tables. |
+| Bottom | **Cancel** (or Esc) | Closes the window and discards every change. |
+| Bottom | **Save table** | Writes the changes into the note. |
+
+The header row has no arrows and no cross: it cannot be moved or deleted, only edited.
+
+**Working in the grid**
+
+- **Cells**: click and type. **Enter** moves to the cell below, **Tab** to the next one.
+- **Selection**: the row and the column of the cell you are in are highlighted, and a line under the grid says which ones they are.
+- **Nothing changes until you press Save table.** Then only that table is rewritten, tidy and with its columns aligned; the rest of the text is not touched, and other tables in the same note stay as they are.
+- A `|` typed in a cell is saved as `\|`, and a cell cannot contain line breaks (a Markdown limit).
+
+The header color is saved in an invisible comment on the line right above the table, for example `<!-- qnb-table header=#4a90d9 -->`: it does not show in the preview, and the table stays a normal Markdown table. If you see that line in text mode, leave it as it is.
+
+Good to know:
+
+- A `|` typed in a cell is saved as `\|`, and a cell cannot contain line breaks (a Markdown limit).
+- Tables inside code blocks are ignored.
+- If a note has a table inside a quote or a list, the button is not shown for that note's tables: edit them in text mode.
+- The button does not appear on locked notes.
 
 ### Text appearance (per note)
 
@@ -576,6 +616,14 @@ If [data compression](#data-file-compression) is enabled, the file instead start
 
 ## Version history
 
+### 1.1.3
+
+- New: **Edit table** button above every table in a note's preview (not available on locked notes). It opens a window with the table as a grid: edit the cells, insert a column to the right of any column with the **+** above it, insert a row below any row with the **+** beside it, move columns left or right, move rows up or down, and delete columns or rows. The window can be resized with the handle in its bottom-right corner, and the grid takes the extra space. The row and the column of the selected cell are highlighted. Nothing changes until you press **Save table**; then only that table is rewritten, tidy and with its columns aligned, and the rest of the note is left untouched. **Cancel** (or Esc) discards everything.
+- New: **First row color** in the same window, to color the table's header row; **No color** removes it. The color is kept in an invisible comment on the line right above the table (`<!-- qnb-table header=#4a90d9 -->`) and shows in the preview. In text mode you will see that line: leave it as it is.
+- Good to know: a `|` typed in a cell is saved as `\|`, and a cell cannot contain line breaks (a Markdown limit). Tables inside code blocks are ignored. If a note has a table inside a quote or a list, the button is not shown for that note's tables: edit them in text mode.
+- Fixed: moving or resizing a note, or dragging the selection rectangle, now ends correctly even if the mouse button is released outside the board or over another window; and the selection rectangle no longer leaves a leftover handler that slowed the board down after many uses. A note can no longer be dragged completely out of the visible board: at least a strip of it always stays in view. A right or middle click on the board background no longer starts a selection rectangle, and two gestures can no longer run at the same time.
+- Fixed: a note could grow by 2 pixels each time the board was opened; a maximized note could save the size of the whole board as its own; resizing from the left edge past the board border made the note grow to the right; and two saves close together could leave the older positions in the file. Saves now run one at a time, in order.
+
 ### 1.1.2
 
 - New: **Rename category** button in the category structure window (right-click a category button in the toolbar), at the bottom left, opposite Close. It opens a small window with the current name; **Enter** or **Rename** confirms. The new name is applied to the category and to all its notes, archived and trashed ones included, without going to the settings. An empty name, or one already used by another category, is refused with a message.
@@ -706,7 +754,7 @@ Quick Notes Board is free and open source. If it makes your day a little easier 
 npm run dev
 ```
 
-Automatically rebuilds on every change to the source files (`main.ts`, `view.ts`, `settings.ts`, `modal.ts`, `i18n.ts`, `crypto.ts`).
+Automatically rebuilds on every change to the source files (`main.ts`, `view.ts`, `settings.ts`, `modal.ts`, `i18n.ts`, `crypto.ts`, `tables.ts`).
 
 ### Project structure
 
@@ -719,6 +767,7 @@ Automatically rebuilds on every change to the source files (`main.ts`, `view.ts`
 | `crypto.ts` | Encryption/decryption of note content. |
 | `changelog.ts` | The news shown in the "What's new" window after an update, and the logic deciding which versions to show (no dependency on Obsidian). |
 | `widgets.ts` | The note widgets: option parsing, the five widgets, their saved state and the shared timer (no dependency on Obsidian). |
+| `tables.ts` | Markdown tables of the notes: finding them in the text, reading, rewriting and the row/column operations (no dependency on Obsidian). |
 | `snooze.ts` | The quick-snooze durations and the deadline calculation (no dependency on Obsidian). |
 | `gradient.ts` | The category background-gradient directions, color validation and CSS generation (no dependency on Obsidian). |
 | `i18n.ts` | Translation dictionaries (IT/EN) and the translation function. |
