@@ -11,7 +11,7 @@ import type { QuickNote, QnbFontFamily } from "./main";
 import { getContrastTextColor } from "./main";
 import { t, QnbLang } from "./i18n";
 import { SNOOZE_OPTIONS_MINUTES, formatClock, formatSnoozeLabel, normalizeSnoozeMinutes } from "./snooze";
-import { cloneTable, deleteColumn, deleteRow, insertColumn, insertRow, moveColumn, moveRow } from "./tables";
+import { DEFAULT_TABLE_COLOR, SUGGESTED_TABLE_COLORS, cellColor, cloneTable, deleteColumn, deleteRow, insertColumn, insertRow, moveColumn, moveRow, normalizeRecentColors, parseHexColor, tintColor } from "./tables";
 import type { QnbTable } from "./tables";
 
 /** Colora le <option> di un <select> categoria con lo stesso colore configurato per quella categoria. */
@@ -1033,8 +1033,8 @@ function mountNoteWindowBar(modal: Modal, plugin: QuickNotesBoardPlugin, categor
 }
 
 /** Finestra a griglia per modificare una tabella Markdown di una nota: celle, righe e colonne
- * (aggiungi, sposta, elimina) e colore della prima riga. Lavora su una copia: la tabella della
- * nota cambia solo con "Salva tabella". */
+ * (aggiungi, sposta, elimina) e colori (prima riga, singole righe e colonne). Lavora su una copia:
+ * la tabella della nota cambia solo con "Salva tabella". */
 export class TableEditModal extends Modal {
 	private plugin: QuickNotesBoardPlugin;
 	private lang: QnbLang;
@@ -1045,7 +1045,8 @@ export class TableEditModal extends Modal {
 	private selCol = 0;
 	private gridWrap!: HTMLElement;
 	private infoEl!: HTMLElement;
-	private colorPicker: ColorComponent | null = null;
+	/** Quadratino con il colore attuale della prima riga, accanto al pulsante per cambiarlo. */
+	private headerSwatch!: HTMLElement;
 
 	constructor(
 		app: App,
@@ -1076,20 +1077,9 @@ export class TableEditModal extends Modal {
 		contentEl.createEl("p", { cls: "setting-item-description", text: this.tr("modal.tableEdit.desc") });
 
 		const colorSetting = new Setting(contentEl).setName(this.tr("modal.tableEdit.headerColor"));
-		colorSetting.addColorPicker((cp) => {
-			this.colorPicker = cp;
-			cp.setValue(this.table.headerColor || "#4a90d9");
-			cp.onChange((value) => {
-				this.table.headerColor = value;
-				this.applyHeaderColor();
-			});
-		});
+		this.headerSwatch = colorSetting.controlEl.createSpan({ cls: "qnb-color-swatch qnb-color-swatch-static" });
 		colorSetting.addButton((btn) =>
-			btn.setButtonText(this.tr("modal.tableEdit.headerColorReset")).onClick(() => {
-				this.table.headerColor = "";
-				this.colorPicker?.setValue("#4a90d9");
-				this.applyHeaderColor();
-			})
+			btn.setButtonText(this.tr("modal.tableEdit.chooseColor")).onClick(() => this.openColorWindow("header", 0))
 		);
 
 		this.gridWrap = contentEl.createDiv({ cls: "qnb-table-edit-scroll" });
@@ -1146,15 +1136,62 @@ export class TableEditModal extends Modal {
 		});
 	}
 
-	private iconButton(parent: HTMLElement, icon: string, label: string, disabled: boolean, onClick: () => void) {
+	private iconButton(parent: HTMLElement, icon: string, label: string, disabled: boolean, onClick: (evt: MouseEvent) => void) {
 		const btn = parent.createEl("button", { cls: "qnb-table-edit-icon-btn clickable-icon" });
 		setIcon(btn, icon);
 		btn.setAttribute("aria-label", label);
 		btn.disabled = disabled;
 		btn.addEventListener("click", (evt) => {
 			evt.preventDefault();
-			onClick();
+			onClick(evt);
 		});
+		return btn;
+	}
+
+	/** Colore della prima riga ("header"), di una colonna o di una riga di dati; `slot` è la
+	 * posizione nella lista dei colori. */
+	private getColor(kind: "header" | "col" | "row", slot: number): string {
+		if (kind === "header") return this.table.headerColor;
+		return (kind === "col" ? this.table.colColors : this.table.rowColors)[slot] ?? "";
+	}
+
+	private setColor(kind: "header" | "col" | "row", slot: number, hex: string) {
+		if (kind === "header") this.table.headerColor = hex;
+		else (kind === "col" ? this.table.colColors : this.table.rowColors)[slot] = hex;
+		this.applyColors();
+	}
+
+	/** Pulsante colore di una colonna o di una riga: apre la finestra per sceglierlo. */
+	private colorButton(parent: HTMLElement, kind: "col" | "row", slot: number) {
+		const label = this.tr(kind === "col" ? "modal.tableEdit.colColor" : "modal.tableEdit.rowColor");
+		const btn = this.iconButton(parent, "palette", label, false, () => this.openColorWindow(kind, slot));
+		btn.dataset.kind = kind;
+		btn.dataset.slot = String(slot);
+	}
+
+	/** Apre la finestra del colore per la prima riga, una colonna o una riga di dati, con le prime
+	 * celle di quella riga o colonna come anteprima. */
+	private openColorWindow(kind: "header" | "col" | "row", slot: number) {
+		const sample =
+			kind === "header"
+				? this.table.header.slice(0, 3)
+				: kind === "col"
+					? [this.table.header[slot], ...this.table.rows.slice(0, 2).map((r) => r[slot])]
+					: this.table.rows[slot].slice(0, 3);
+		const title =
+			kind === "header"
+				? this.tr("modal.tableColor.titleHeader")
+				: this.tr(kind === "col" ? "modal.tableColor.titleCol" : "modal.tableColor.titleRow", { n: String(slot + 1) });
+		new TableColorModal(
+			this.app,
+			this.plugin,
+			this.categoryName,
+			title,
+			sample,
+			kind === "header",
+			this.getColor(kind, slot),
+			(hex) => this.setColor(kind, slot, hex)
+		).open();
 	}
 
 	private renderGrid(focus?: { r: number; c: number }) {
@@ -1190,6 +1227,7 @@ export class TableEditModal extends Modal {
 				this.selCol = c + 1;
 				this.renderGrid({ r: this.selRow, c: this.selCol });
 			});
+			this.colorButton(td, "col", c);
 		}
 
 		for (let r = 0; r < rowCount; r++) {
@@ -1212,7 +1250,8 @@ export class TableEditModal extends Modal {
 					this.renderGrid({ r: this.selRow, c: this.selCol });
 				});
 			} else {
-				// L'intestazione non si sposta né si elimina: tre posti vuoti tengono il "+" allineato.
+				// L'intestazione non si sposta né si elimina, e ha il suo colore in alto: tre posti vuoti
+				// prima del "+" e uno dopo tengono i pulsanti allineati con quelli delle altre righe.
 				for (let i = 0; i < 3; i++) ctl.createSpan({ cls: "qnb-table-edit-ctl-spacer" });
 			}
 			this.iconButton(ctl, "plus", this.tr("modal.tableEdit.insertRowBelow"), false, () => {
@@ -1220,6 +1259,8 @@ export class TableEditModal extends Modal {
 				this.selRow = r + 1;
 				this.renderGrid({ r: this.selRow, c: this.selCol });
 			});
+			if (r >= 1) this.colorButton(ctl, "row", r - 1);
+			else ctl.createSpan({ cls: "qnb-table-edit-ctl-spacer" });
 			for (let c = 0; c < cols; c++) {
 				const td = tr.createEl("td");
 				const input = td.createEl("input", {
@@ -1246,7 +1287,7 @@ export class TableEditModal extends Modal {
 			}
 		}
 
-		this.applyHeaderColor();
+		this.applyColors();
 		this.updateSelection();
 		if (focus) this.focusCell(focus.r, focus.c);
 	}
@@ -1271,14 +1312,175 @@ export class TableEditModal extends Modal {
 		this.infoEl.setText(this.tr("modal.tableEdit.selection", { col: String(this.selCol + 1), row: rowLabel }));
 	}
 
-	private applyHeaderColor() {
-		const color = this.table.headerColor;
-		this.gridWrap.querySelectorAll<HTMLInputElement>("input.qnb-table-edit-head").forEach((input) => {
+	/** Colora le celle della griglia (prima riga piena, righe e colonne attenuate) e tinge i
+	 * pulsanti colore di righe e colonne con il loro colore. */
+	private applyColors() {
+		this.gridWrap.querySelectorAll<HTMLInputElement>("input[data-r]").forEach((input) => {
+			const color = cellColor(this.table, Number(input.dataset.r), Number(input.dataset.c));
+			const tint = color && !color.solid ? tintColor(color.hex) : "";
 			input.setCssStyles({
-				backgroundColor: color || "",
-				color: color ? getContrastTextColor(color) : "",
+				backgroundColor: color?.solid ? color.hex : "",
+				backgroundImage: tint ? `linear-gradient(${tint}, ${tint})` : "",
+				color: color?.solid ? getContrastTextColor(color.hex) : "",
 			});
 		});
+		this.headerSwatch.setCssStyles({ backgroundColor: this.table.headerColor });
+		this.gridWrap.querySelectorAll<HTMLButtonElement>("button[data-kind]").forEach((btn) => {
+			btn.setCssStyles({ color: this.getColor(btn.dataset.kind === "row" ? "row" : "col", Number(btn.dataset.slot)) });
+		});
+	}
+
+	onClose() {
+		this.contentEl.empty();
+	}
+}
+
+/** Finestra piccola per scegliere il colore di una riga, di una colonna o della prima riga di una
+ * tabella: anteprima delle celle, ultimi colori usati, campo esadecimale e, se serve, il selettore
+ * del sistema. Il colore si applica solo con "Conferma"; l'ultimo colore scelto è il primo proposto
+ * la volta dopo. */
+export class TableColorModal extends Modal {
+	private plugin: QuickNotesBoardPlugin;
+	private lang: QnbLang;
+	private categoryName: string | undefined;
+	private heading: string;
+	private sample: string[];
+	private solid: boolean;
+	private hadColor: boolean;
+	private onDone: (hex: string) => void;
+	private value: string;
+	private previewCells: HTMLElement[] = [];
+	private swatchWrap!: HTMLElement;
+	private valueSwatch!: HTMLElement;
+	private hexInput!: HTMLInputElement;
+	private confirmBtn!: ButtonComponent;
+
+	/** `current` è il colore già assegnato ("" se nessuno); `onDone` riceve il colore confermato,
+	 * oppure "" se lo si toglie. */
+	constructor(
+		app: App,
+		plugin: QuickNotesBoardPlugin,
+		categoryName: string | undefined,
+		heading: string,
+		sample: string[],
+		solid: boolean,
+		current: string,
+		onDone: (hex: string) => void
+	) {
+		super(app);
+		this.plugin = plugin;
+		this.lang = plugin.settings.language;
+		this.categoryName = categoryName;
+		this.heading = heading;
+		this.sample = sample;
+		this.solid = solid;
+		this.hadColor = current !== "";
+		this.onDone = onDone;
+		this.value = current || plugin.settings.tableRecentColors[0] || DEFAULT_TABLE_COLOR;
+	}
+
+	private tr(key: string, vars?: Record<string, string>): string {
+		return t(this.lang, key, vars);
+	}
+
+	onOpen() {
+		const { contentEl } = this;
+		contentEl.empty();
+		this.modalEl.addClass("qnb-table-color-modal");
+		if (!mountNoteWindowBar(this, this.plugin, this.categoryName, this.heading)) {
+			new Setting(contentEl).setName(this.heading).setHeading();
+		}
+
+		contentEl.createDiv({ cls: "qnb-table-color-label", text: this.tr("modal.tableColor.preview") });
+		const preview = contentEl.createDiv({ cls: "qnb-table-color-preview" });
+		for (const text of this.sample) {
+			this.previewCells.push(preview.createDiv({ cls: "qnb-table-color-cell", text: text || "\u00a0" }));
+		}
+
+		contentEl.createDiv({ cls: "qnb-table-color-label", text: this.tr("modal.tableColor.colors") });
+		this.swatchWrap = contentEl.createDiv({ cls: "qnb-table-color-swatches" });
+		for (const hex of normalizeRecentColors([...this.plugin.settings.tableRecentColors, ...SUGGESTED_TABLE_COLORS])) {
+			const swatch = this.swatchWrap.createEl("button", { cls: "qnb-color-swatch", attr: { type: "button", "aria-label": hex } });
+			swatch.setCssStyles({ backgroundColor: hex });
+			swatch.dataset.hex = hex;
+			swatch.addEventListener("click", () => this.setValue(hex));
+		}
+
+		const field = contentEl.createDiv({ cls: "qnb-table-color-field" });
+		field.createSpan({ text: this.tr("modal.tableColor.color") });
+		this.valueSwatch = field.createSpan({ cls: "qnb-color-swatch qnb-color-swatch-static" });
+		this.hexInput = field.createEl("input", {
+			type: "text",
+			cls: "qnb-table-color-hex",
+			attr: { maxlength: "7", spellcheck: "false" },
+		});
+		this.hexInput.addEventListener("input", () => {
+			const hex = parseHexColor(this.hexInput.value);
+			if (hex) {
+				this.setValue(hex, true);
+			} else {
+				this.hexInput.addClass("is-invalid");
+				this.confirmBtn.setDisabled(true);
+			}
+		});
+		// Il selettore del sistema resta per i colori nuovi; è invisibile, lo apre il pulsante.
+		const native = field.createEl("input", { type: "color", cls: "qnb-table-color-native" });
+		native.addEventListener("input", () => this.setValue(native.value));
+		new ButtonComponent(field).setButtonText(this.tr("modal.tableColor.more")).onClick(() => {
+			native.value = this.value;
+			native.click();
+		});
+
+		const footer = contentEl.createDiv({ cls: "qnb-table-color-footer" });
+		new ButtonComponent(footer)
+			.setButtonText(this.tr("modal.tableColor.remove"))
+			.setDisabled(!this.hadColor)
+			.onClick(() => {
+				this.onDone("");
+				this.close();
+			});
+		const end = footer.createDiv({ cls: "qnb-table-color-footer-end" });
+		new ButtonComponent(end).setButtonText(this.tr("modal.tableColor.cancel")).onClick(() => this.close());
+		this.confirmBtn = new ButtonComponent(end)
+			.setButtonText(this.tr("modal.tableColor.confirm"))
+			.setCta()
+			.onClick(() => this.confirm());
+
+		// Invio conferma, da qualunque punto della finestra (tranne sopra un pulsante, che fa il suo).
+		contentEl.addEventListener("keydown", (evt) => {
+			if (evt.key !== "Enter" || (evt.target as HTMLElement).closest("button")) return;
+			evt.preventDefault();
+			this.confirm();
+		});
+
+		this.setValue(this.value);
+		this.hexInput.focus();
+		this.hexInput.select();
+	}
+
+	/** Mette `hex` come colore scelto e aggiorna anteprima, quadratini e campo (salvo quando è il
+	 * campo stesso ad averlo appena cambiato). */
+	private setValue(hex: string, fromField = false) {
+		this.value = hex;
+		if (!fromField) this.hexInput.value = hex;
+		this.hexInput.removeClass("is-invalid");
+		this.confirmBtn.setDisabled(false);
+		this.valueSwatch.setCssStyles({ backgroundColor: hex });
+		for (const cell of this.previewCells) {
+			cell.setCssStyles({
+				backgroundColor: this.solid ? hex : tintColor(hex),
+				color: this.solid ? getContrastTextColor(hex) : "",
+			});
+		}
+		this.swatchWrap.querySelectorAll<HTMLElement>("button").forEach((b) => b.toggleClass("is-selected", b.dataset.hex === hex));
+	}
+
+	private confirm() {
+		const hex = parseHexColor(this.hexInput.value);
+		if (hex === null) return;
+		void this.plugin.rememberTableColor(hex);
+		this.onDone(hex);
+		this.close();
 	}
 
 	onClose() {

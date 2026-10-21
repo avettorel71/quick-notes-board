@@ -5,7 +5,7 @@ import { DEFAULT_FONT_SIZE, DEFAULT_FONT_FAMILY, DEFAULT_FONT_COLOR, DEFAULT_BG_
 import { NewNoteModal, LabelsManagerModal, ChangeCategoryModal, FontSizeModal, TrashModal, ArchiveModal, LockPasswordModal, NoteInfoModal, CategoryStatsModal, BoardInfoModal, BoardActivityModal, DueDateModal, AlarmListModal, NoteExplorerModal, BoardStructureModal, LabelAssignModal, TableEditModal } from "./modal";
 import { t } from "./i18n";
 import type { QnbCategory, QnbGroup, QnbNoteIconId } from "./settings";
-import { findTables, isEditableSize, replaceTableInContent } from "./tables";
+import { cellColor, findTables, isEditableSize, replaceTableInContent, tabularTextToMarkdown, tintColor } from "./tables";
 import { encryptText, decryptText, DecryptionError } from "./crypto";
 import { SNOOZE_OPTIONS_MINUTES, formatSnoozeLabel, normalizeSnoozeMinutes } from "./snooze";
 
@@ -2334,12 +2334,15 @@ export class QuickNotesBoardView extends ItemView {
 			const info = parsed[index];
 			// Già decorata (render ripetuto sullo stesso elemento): non raddoppiare il pulsante.
 			if (tableEl.previousElementSibling?.classList.contains("qnb-table-edit-bar")) return;
-			if (info.headerColor) {
-				const textColor = getContrastTextColor(info.headerColor);
-				tableEl.querySelectorAll<HTMLElement>("thead th").forEach((th) => {
-					th.setCssStyles({ backgroundColor: info.headerColor, color: textColor });
+			// Colori: la prima riga piena, righe e colonne attenuate (vedi cellColor).
+			Array.from(tableEl.rows).forEach((rowEl, r) => {
+				Array.from(rowEl.cells).forEach((cellEl, c) => {
+					const color = cellColor(info, r, c);
+					if (!color) return;
+					if (color.solid) cellEl.setCssStyles({ backgroundColor: color.hex, color: getContrastTextColor(color.hex) });
+					else cellEl.setCssStyles({ backgroundColor: tintColor(color.hex) });
 				});
-			}
+			});
 			// Tabelle enormi: il colore sì, la griglia no (sarebbe lenta); si modificano come testo.
 			if (!isEditableSize(info)) return;
 			const bar = createDiv({ cls: "qnb-table-edit-bar" });
@@ -2908,6 +2911,19 @@ export class QuickNotesBoardView extends ItemView {
 
 		textarea.addEventListener("input", updateSuggestions);
 		textarea.addEventListener("click", updateSuggestions);
+
+		// Incollando celle copiate da Excel, il testo diventa una tabella Markdown, su righe sue.
+		textarea.addEventListener("paste", (evt) => {
+			const table = tabularTextToMarkdown(evt.clipboardData?.getData("text/plain") ?? "");
+			if (table === null) return;
+			evt.preventDefault();
+			const before = textarea.value.slice(0, textarea.selectionStart);
+			const after = textarea.value.slice(textarea.selectionEnd);
+			const lead = before === "" || before.endsWith("\n\n") ? "" : before.endsWith("\n") ? "\n" : "\n\n";
+			const tail = after === "" || after.startsWith("\n\n") ? "" : after.startsWith("\n") ? "\n" : "\n\n";
+			textarea.setRangeText(lead + table + tail, textarea.selectionStart, textarea.selectionEnd, "end");
+			textarea.dispatchEvent(new Event("input"));
+		});
 
 		textarea.addEventListener("blur", () => {
 			hideSuggestions();

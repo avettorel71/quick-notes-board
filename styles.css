@@ -2408,6 +2408,104 @@ button.qnb-group-menu-btn {
 	box-shadow: 0 0 0 2px var(--interactive-accent);
 }
 
+/* Quadratino di colore: nella finestra del colore e accanto al colore della prima riga. */
+.qnb-color-swatch {
+	width: 24px;
+	height: 24px;
+	padding: 0;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-s);
+	box-shadow: none;
+	cursor: pointer;
+}
+
+.qnb-color-swatch-static {
+	display: inline-block;
+	flex: none;
+	cursor: default;
+}
+
+.qnb-color-swatch.is-selected {
+	outline: 2px solid var(--interactive-accent);
+	outline-offset: 1px;
+}
+
+/* ===== Finestra del colore di righe e colonne ===== */
+.qnb-table-color-modal {
+	width: 420px;
+	max-width: 94vw;
+}
+
+.qnb-table-color-label {
+	margin: 12px 0 4px;
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+}
+
+.qnb-table-color-preview {
+	display: flex;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-s);
+	overflow: hidden;
+}
+
+.qnb-table-color-cell {
+	flex: 1 1 0;
+	min-width: 0;
+	padding: 6px 8px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.qnb-table-color-swatches {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+}
+
+.qnb-table-color-field {
+	position: relative;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-top: 14px;
+}
+
+.qnb-table-color-hex {
+	width: 90px;
+	font-family: var(--font-monospace);
+}
+
+.qnb-table-color-hex.is-invalid {
+	border-color: var(--text-error);
+}
+
+/* Selettore del sistema: invisibile, lo apre il pulsante "Altro colore…". */
+.qnb-table-color-native {
+	position: absolute;
+	right: 0;
+	bottom: 0;
+	width: 1px;
+	height: 1px;
+	padding: 0;
+	border: none;
+	opacity: 0;
+	pointer-events: none;
+}
+
+.qnb-table-color-footer {
+	display: flex;
+	justify-content: space-between;
+	gap: 8px;
+	margin-top: 18px;
+}
+
+.qnb-table-color-footer-end {
+	display: flex;
+	gap: 8px;
+}
+
 .qnb-table-edit-info {
 	margin: 0 0 12px;
 }

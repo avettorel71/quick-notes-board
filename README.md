@@ -163,10 +163,14 @@ The note's body supports the same Markdown as regular Obsidian notes:
 - **Bold** and *italic* (shortcuts **Ctrl/Cmd+B** and **Ctrl/Cmd+I** while editing).
 - **Internal links** `[[note name]]`: clickable (open the note; Ctrl/Cmd+click opens it in a new tab) with hover preview, just like in a regular note. While editing, typing `[[` (or **Ctrl/Cmd+K**) opens an **autocomplete** suggester that combines matching vault notes and other quick notes on the board — picking a quick note inserts a special link that, when clicked, brings that note into view and highlights it (even if it was hidden or archived).
 - **Embedded images** `![[image.jpg]]`, resizable by dragging a handle on their corner.
-- **Tables**, with borders and a highlighted header row; they resize correctly when you change the note's font size, and can be edited as a grid with a button, see [Editing tables](#editing-tables).
+- **Tables**, with borders and a highlighted header row; they resize correctly when you change the note's font size, can be pasted straight from Excel, see [Pasting a table from Excel](#pasting-a-table-from-excel), and can be edited as a grid with a button, with colors for the first row, rows and columns, see [Editing tables](#editing-tables).
 - **Checkboxes** `- [ ]`: clickable, and the click genuinely updates and saves the note's text. A **progress bar** can optionally be shown above each checklist, with a customizable color gradient and a distinct color/text once it reaches 100%.
 
 While editing, the text stays a plain editable area (no live formatting as you type), to keep it light and reliable; once you leave editing mode, everything renders correctly.
+
+### Pasting a table from Excel
+
+Copy a range of cells in Excel (or any spreadsheet) and paste it while editing a note: it turns into a Markdown table on its own lines, with the first row as the header and the columns aligned. A cell with several lines keeps them as line breaks, and a `|` inside a cell is escaped. If what you paste does not look like a table (a single row or a single column, rows with different numbers of cells, text indented with tabs), it is pasted as it is. Once pasted, the table can be edited with the editor below.
 
 ### Editing tables
 
@@ -178,19 +182,30 @@ Above every table in a note's preview there is a small **table icon** (left-alig
 
 | Where | Button | What it does |
 |---|---|---|
-| Top | **First row color** (color picker) | Colors the header row. The text color adjusts automatically for contrast. |
-| Top | **No color** | Removes the header color. |
+| Top | **First row color** · **Choose…** | Opens the color window for the header row. The color is solid, and the text color adjusts automatically for contrast. |
 | Above each column | **◀** / **▶** | Moves that column left / right. Disabled on the first / last column. |
 | Above each column | **✕** | Deletes that column. Disabled when it is the only one left. |
 | Above each column | **+** | Inserts an empty column to the right of that column. |
+| Above each column | **🎨** | Opens the color window for the whole column. The button takes the column's color. |
 | Beside each row | **↑** / **↓** | Moves that row up / down. Disabled on the first / last row of data. |
 | Beside each row | **✕** | Deletes that row. |
 | Beside each row | **+** | Inserts an empty row right below it. On the header row it adds the first row of data. |
+| Beside each row | **🎨** | The same window for the whole row. Not on the header row: its color is chosen at the top. |
 | Bottom right corner | handle | Drag it to make the window wider or taller; the grid takes the extra space, which is handy for wide tables. |
 | Bottom | **Cancel** (or Esc) | Closes the window and discards every change. |
 | Bottom | **Save table** | Writes the changes into the note. |
 
-The header row has no arrows and no cross: it cannot be moved or deleted, only edited.
+The header row has no arrows and no cross: it cannot be moved or deleted, only edited. Colors of rows and columns are shown softly, so the text stays readable in light and dark themes; where a row and a column cross, the row's color wins, and the first row keeps its solid color. Colors follow their row or column when you move, insert or delete it, and they show in the note's preview too.
+
+**The color window**
+
+The 🎨 buttons (and **Choose…** for the first row) open a small window dedicated to the color:
+
+- **Preview**: the first cells of that row or column, colored as they will appear in the table.
+- **Colors**: the last ones you used (the most recent first), completed with a few suggested ones; click one to choose it.
+- **Color field**: type a code such as `#ffd966` (the `#` is optional, and the short form `#fd6` works too). **More colors…** opens the system color picker for a new color.
+- **Confirm** (or **Enter**) applies the color; **Cancel** (or Esc) closes without changing anything. **Remove color** takes the color off the row or column.
+- The window starts from the color the row or column already has; if it has none, from the last color you chose, which is remembered even after a restart.
 
 **Working in the grid**
 
@@ -199,7 +214,7 @@ The header row has no arrows and no cross: it cannot be moved or deleted, only e
 - **Nothing changes until you press Save table.** Then only that table is rewritten, tidy and with its columns aligned; the rest of the text is not touched, and other tables in the same note stay as they are.
 - A `|` typed in a cell is saved as `\|`, and a cell cannot contain line breaks (a Markdown limit).
 
-The header color is saved in an invisible comment on the line right above the table, for example `<!-- qnb-table header=#4a90d9 -->`: it does not show in the preview, and the table stays a normal Markdown table. If you see that line in text mode, leave it as it is.
+The header color is saved in an invisible comment on the line right above the table, for example `<!-- qnb-table header=#4a90d9 cols=2:#ffd966 rows=1:#f4cccc -->` (the colors of rows and columns are saved there too, counting from 1): it does not show in the preview, and the table stays a normal Markdown table. If you see that line in text mode, leave it as it is; if you add or remove rows or columns by hand, the colors can shift by one position.
 
 Good to know:
 
@@ -615,6 +630,11 @@ If [data compression](#data-file-compression) is enabled, the file instead start
 ---
 
 ## Version history
+
+### 1.1.4
+
+- New: **Row and column colors** in the table editor. The palette button above each column and beside each row opens a small window: a preview of the cells, the colors you used last (the last one chosen is offered first, even after a restart), a field for a color code, **More colors…** for the system color picker, **Remove color**, **Cancel** and **Confirm** (Enter confirms). The first row's color is chosen in the same window, with the **Choose…** button next to it. The color is shown softly, so the text stays readable in both light and dark themes, while the first row keeps its solid color; where a row and a column cross, the row's color wins. Colors follow their row or column when you move, insert or delete it, and show in the note's preview as well. They are saved in the same invisible comment above the table, for example `<!-- qnb-table header=#4a90d9 cols=2:#ffd966 rows=1:#f4cccc -->`; if you add or remove rows by hand in text mode, the colors can shift by one position.
+- New: **Paste from Excel**: when you paste cells copied from Excel (or any spreadsheet) while editing a note, they become a Markdown table on their own lines, with the first row as the header and the columns aligned. A cell with several lines keeps them as line breaks, and a `|` in a cell is escaped. Text that does not look like a table (a single row or column, rows with different numbers of cells, indented text) is pasted as it is.
 
 ### 1.1.3
 

@@ -3,6 +3,7 @@ import { MissedRemindersModal, AlarmRingModal, WhatsNewModal, addRepeatInterval,
 import { currentChangelog, pendingChangelog } from "./changelog";
 import { WidgetManager, WIDGET_BLOCK_NAME } from "./widgets";
 import type { PomodoroPhase } from "./widgets";
+import { normalizeRecentColors, rememberColor } from "./tables";
 import { computeSnooze, formatClock, normalizeSnoozeMinutes } from "./snooze";
 import {
 	isHexColor,
@@ -492,6 +493,7 @@ export default class QuickNotesBoardPlugin extends Plugin {
 			categories: normalizedCategories,
 			soundFiles: { ...(stored.soundFiles || {}) },
 			noteIconOrder: normalizeNoteIconOrder(stored.noteIconOrder),
+			tableRecentColors: normalizeRecentColors(stored.tableRecentColors),
 		};
 
 		// Migrazione da una versione precedente del plugin, che aveva solo due suoni fissi.
@@ -816,6 +818,12 @@ export default class QuickNotesBoardPlugin extends Plugin {
 	async setActivityChartWindowSize(width: number, height: number) {
 		this.settings.activityChartWindowWidth = Math.min(3000, Math.max(480, Math.round(width)));
 		this.settings.activityChartWindowHeight = Math.min(2000, Math.max(400, Math.round(height)));
+		await this.saveSettings();
+	}
+
+	/** Ricorda un colore scelto per righe e colonne di una tabella: la volta dopo è il primo proposto. */
+	async rememberTableColor(hex: string) {
+		this.settings.tableRecentColors = rememberColor(this.settings.tableRecentColors, hex);
 		await this.saveSettings();
 	}
 

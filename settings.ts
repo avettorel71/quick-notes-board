@@ -334,6 +334,8 @@ export interface QuickNotesBoardSettings {
 	/** Ultima durata (minuti) scelta per il posticipo rapido di un allarme: è la voce
 	 * preselezionata la volta successiva. */
 	lastSnoozeMinutes: number;
+	/** Ultimi colori scelti per righe e colonne delle tabelle (il più recente per primo). */
+	tableRecentColors: string[];
 	boardStructureWindowWidth: number;
 	boardStructureWindowHeight: number;
 	/** Cartella del vault dove creare i file quando si trasforma una quick note in nota vera; vuota = radice del vault. */
@@ -390,6 +392,7 @@ export const DEFAULT_SETTINGS: QuickNotesBoardSettings = {
 	activityChartHideEmptyDays: false,
 	activityChartShowModified: false,
 	lastSnoozeMinutes: 10,
+	tableRecentColors: [],
 	boardStructureWindowWidth: 1000,
 	boardStructureWindowHeight: 600,
 	convertedNotesFolder: "",
