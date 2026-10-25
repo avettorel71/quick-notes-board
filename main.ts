@@ -4,6 +4,10 @@ import { currentChangelog, pendingChangelog } from "./changelog";
 import { WidgetManager, WIDGET_BLOCK_NAME } from "./widgets";
 import type { PomodoroPhase } from "./widgets";
 import { normalizeRecentColors, rememberColor } from "./tables";
+import { GoalCelebrationModal } from "./goalsCelebration";
+import { playGoalSound } from "./goalsSound";
+import { bumpCounter, emptyGoalsState, evaluateGoals, normalizeGoalsState, resetMedals } from "./goals";
+import type { CounterKind, Goal, GoalAction, GoalAwarded, GoalPeriod, GoalSources, GoalsState } from "./goals";
 import { computeSnooze, formatClock, normalizeSnoozeMinutes } from "./snooze";
 import {
 	isHexColor,
@@ -301,6 +305,9 @@ interface QnbPluginDataFile {
 	[key: string]: unknown;
 }
 
+/** Azioni che hanno un contatore giornaliero proprio (le altre si leggono dai dati della board). */
+const COUNTER_ACTIONS: readonly GoalAction[] = ["archive", "pomodoro", "delete", "alarm", "chars", "label"];
+
 export default class QuickNotesBoardPlugin extends Plugin {
 	notes: QuickNote[] = [];
 	settings: QuickNotesBoardSettings = DEFAULT_SETTINGS;
@@ -312,6 +319,16 @@ export default class QuickNotesBoardPlugin extends Plugin {
 	/** Finché il registro non è stato letto da disco non va mai scritto: si rischierebbe di
 	 * sovrascrivere quello salvato con uno vuoto. */
 	private activityLogLoaded = false;
+	/** Obiettivi, premi e contatori (data.json, chiave "goals"). Vedi goals.ts. */
+	goals: GoalsState = emptyGoalsState();
+	private goalsLoaded = false;
+	/** Azioni compiute da controllare: si raccolgono e si valutano una sola volta, poco dopo,
+	 * così una raffica di azioni (es. archiviare 30 note) costa un solo calcolo. */
+	private goalActionsPending = new Set<GoalAction>();
+	private goalFlushTimer: number | null = null;
+	private goalsDirty = false;
+	private goalSaveTimer: number | null = null;
+	private celebration: GoalCelebrationModal | null = null;
 	/** Ultimo avviso di scadenza inviato per nota (solo in memoria: non sopravvive alla
 	 * chiusura di Obsidian, come concordato). */
 	private dueReminderLastFired = new Map<string, number>();
@@ -362,6 +379,7 @@ export default class QuickNotesBoardPlugin extends Plugin {
 		await this.loadNotes();
 		await this.loadActivityLog();
 		await this.loadWidgetState();
+		await this.loadGoals();
 
 		// Note widget: il blocco ```QNBWidget è sostituito da un widget vivo. Registrato anche in
 		// minuscolo, nel caso Obsidian confronti il nome del linguaggio senza badare alle maiuscole.
@@ -430,7 +448,14 @@ export default class QuickNotesBoardPlugin extends Plugin {
 	}
 
 	onunload() {
-		// Nulla da ripulire: i dati sono già salvati su file ad ogni modifica.
+		// I dati sono già salvati su file ad ogni modifica; resta solo da fermare il controllo
+		// degli obiettivi in attesa.
+		if (this.goalFlushTimer !== null) window.clearTimeout(this.goalFlushTimer);
+		this.goalFlushTimer = null;
+		if (this.goalSaveTimer !== null) window.clearTimeout(this.goalSaveTimer);
+		this.goalSaveTimer = null;
+		if (this.goalsDirty) this.persistGoals();
+		this.celebration?.close();
 	}
 
 	async activateView() {
@@ -510,8 +535,173 @@ export default class QuickNotesBoardPlugin extends Plugin {
 		data.settings = this.settings as unknown as Record<string, unknown>;
 		if (this.activityLogLoaded) data.activityLog = this.activityLog;
 		if (this.widgetStateLoaded) data.widgetState = this.widgets.store.toJSON();
+		if (this.goalsLoaded) data.goals = this.goals;
 		await this.saveData(data);
 	}
+
+	// ===== OBIETTIVI (inizio) =====
+
+	private async loadGoals() {
+		const data = ((await this.loadData()) as QnbPluginDataFile | null) || {};
+		this.goals = normalizeGoalsState(data.goals);
+		this.goalsLoaded = true;
+	}
+
+	private goalSources(): GoalSources {
+		return { notes: this.notes, activityLog: this.activityLog };
+	}
+
+	/** Nome dell'obiettivo: quello scelto dall'utente, altrimenti "azione: N periodo". */
+	goalDisplayName(goal: Goal): string {
+		if (goal.name) return goal.name;
+		return this.tr("goals.autoName", {
+			action: this.tr(`goals.action.${goal.action}`),
+			n: String(goal.target),
+			per: this.tr(`goals.per.${goal.period}`),
+		});
+	}
+
+	/** Categoria o etichetta a cui l'obiettivo è limitato ("" se vale per tutte). */
+	goalScopeText(goal: Goal): string {
+		if (goal.action === "label" && goal.label) {
+			return this.settings.labels.find((l) => l.id === goal.label)?.name ?? this.tr("goals.edit.deletedLabel");
+		}
+		return goal.action === "create" || goal.action === "modify" ? goal.category : "";
+	}
+
+	/** Una cosa è successa: la board lo comunica qui. Se gli obiettivi sono spenti non fa nulla
+	 * (nessun calcolo, nessun salvataggio). Il controllo vero e proprio avviene una volta sola,
+	 * poco dopo, per tutte le azioni arrivate nel frattempo. */
+	goalEvent(action: GoalAction, count = 1, labelId = "") {
+		if (!this.settings.goalsEnabled || !this.goalsLoaded || count <= 0) return;
+		if (COUNTER_ACTIONS.includes(action)) {
+			bumpCounter(this.goals, action as CounterKind, Date.now(), count, labelId);
+			this.goalsDirty = true;
+		}
+		this.goalActionsPending.add(action);
+		if (this.goalFlushTimer === null) this.goalFlushTimer = window.setTimeout(() => this.flushGoalEvents(), 500);
+	}
+
+	private flushGoalEvents() {
+		this.goalFlushTimer = null;
+		const actions = [...this.goalActionsPending];
+		this.goalActionsPending.clear();
+		const awarded: GoalAwarded[] = [];
+		if (this.settings.goalsEnabled && this.goals.goals.length > 0) {
+			const now = Date.now();
+			for (const action of actions) awarded.push(...evaluateGoals(this.goals, this.goalSources(), now, action));
+		}
+		if (awarded.length > 0) this.persistGoals();
+		else if (this.goalsDirty) this.persistGoalsSoon();
+		if (awarded.length > 0) this.celebrateGoals(awarded);
+	}
+
+	private persistGoals() {
+		if (this.goalSaveTimer !== null) window.clearTimeout(this.goalSaveTimer);
+		this.goalSaveTimer = null;
+		this.goalsDirty = false;
+		void this.saveSettings();
+	}
+
+	/** Solo i contatori sono cambiati (nessun premio): si salvano una volta ogni qualche
+	 * secondo invece che a ogni azione, per non scrivere su disco di continuo mentre si scrive. */
+	private persistGoalsSoon() {
+		if (this.goalSaveTimer !== null) return;
+		this.goalSaveTimer = window.setTimeout(() => this.persistGoals(), 5000);
+	}
+
+	/** Controlla subito tutti gli obiettivi (apertura della finestra, obiettivo creato o cambiato). */
+	checkGoalsNow() {
+		if (!this.settings.goalsEnabled || !this.goalsLoaded) return;
+		const awarded = evaluateGoals(this.goals, this.goalSources(), Date.now());
+		if (awarded.length > 0) {
+			this.persistGoals();
+			this.celebrateGoals(awarded);
+		}
+	}
+
+	private celebrateGoals(awarded: GoalAwarded[]) {
+		this.refreshGoalButtons();
+		if (this.settings.goalsCelebration) {
+			const items = awarded.map((a) => ({ name: this.goalDisplayName(a.goal), period: a.goal.period }));
+			if (this.celebration) this.celebration.addItems(items);
+			else {
+				this.celebration = new GoalCelebrationModal(this.app, this, items, () => (this.celebration = null));
+				this.celebration.open();
+			}
+		}
+		// Un suono scelto dall'utente ha la precedenza; altrimenti quello incluso nel plugin.
+		if (this.getSoundResourcePath("goal-reached")) this.playSound("goal-reached");
+		else if (this.settings.goalsDefaultSound) playGoalSound();
+	}
+
+	/** Aggiorna il contatore sul pulsante Obiettivi in tutte le board aperte. */
+	refreshGoalButtons() {
+		for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_QNB)) {
+			(leaf.view as QuickNotesBoardView).updateGoalsButton();
+		}
+	}
+
+	async saveGoalList(goals: Goal[]) {
+		this.goals.goals = goals;
+		await this.saveSettings();
+		this.goalsDirty = false;
+		this.checkGoalsNow();
+		this.refreshGoalButtons();
+	}
+
+	/** Elimina gli obiettivi di un periodo (o tutti, con null). Le medaglie già ottenute restano. */
+	async deleteGoals(period: GoalPeriod | null) {
+		await this.saveGoalList(period ? this.goals.goals.filter((g) => g.period !== period) : []);
+	}
+
+	/** Azzera medaglie e serie; gli obiettivi restano. */
+	async resetGoalMedals() {
+		resetMedals(this.goals, this.goalSources(), Date.now());
+		this.goalsDirty = false;
+		await this.saveSettings();
+		this.refreshGoalButtons();
+	}
+
+	/** Elimina obiettivi, medaglie, serie e contatori. */
+	async resetAllGoals() {
+		this.goals.goals = [];
+		this.goals.awards = {};
+		this.goals.counters = {};
+		this.goalsDirty = false;
+		await this.saveSettings();
+		this.refreshGoalButtons();
+	}
+
+	async setGoalsEnabled(enabled: boolean) {
+		this.settings.goalsEnabled = enabled;
+		await this.saveSettings();
+		this.refreshOpenViews();
+	}
+
+	async setGoalsShowProgress(show: boolean) {
+		this.settings.goalsShowProgress = show;
+		await this.saveSettings();
+		this.refreshGoalButtons();
+	}
+
+	async setGoalsWindowSize(width: number, height: number) {
+		this.settings.goalsWindowWidth = Math.round(width);
+		this.settings.goalsWindowHeight = Math.round(height);
+		await this.saveSettings();
+	}
+
+	async setGoalsDefaultSound(enabled: boolean) {
+		this.settings.goalsDefaultSound = enabled;
+		await this.saveSettings();
+	}
+
+	async setGoalsCelebration(enabled: boolean) {
+		this.settings.goalsCelebration = enabled;
+		await this.saveSettings();
+	}
+
+	// ===== OBIETTIVI (fine) =====
 
 	private async loadWidgetState() {
 		const data = ((await this.loadData()) as QnbPluginDataFile | null) || {};
@@ -531,6 +721,7 @@ export default class QuickNotesBoardPlugin extends Plugin {
 		if (info.label) message = `${info.label} — ${message}`;
 		if (info.late) message += ` ${this.tr("widget.pomodoro.lateAt", { time: formatClock(info.endedAt) })}`;
 		new Notice(message, 0);
+		if (info.ended === "work") this.goalEvent("pomodoro");
 		this.playSound(this.settings.soundFiles["widget-pomodoro-end"] ? "widget-pomodoro-end" : "note-due-reminder");
 	}
 
@@ -578,6 +769,7 @@ export default class QuickNotesBoardPlugin extends Plugin {
 		// ravvicinati non possono così farsi perdere a vicenda nulla.
 		data.settings = this.settings as unknown as Record<string, unknown>;
 		data.activityLog = this.activityLog;
+		if (this.goalsLoaded) data.goals = this.goals;
 		await this.saveData(data);
 	}
 
@@ -589,6 +781,7 @@ export default class QuickNotesBoardPlugin extends Plugin {
 		if (ids.includes(noteId)) return;
 		ids.push(noteId);
 		void this.saveActivityLog();
+		this.goalEvent("modify");
 	}
 
 	refreshOpenViews() {

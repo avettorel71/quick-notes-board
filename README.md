@@ -30,23 +30,24 @@ Customizable **sounds** for dozens of actions and smooth **window animations** r
 8. [Groups and subgroups](#groups-and-subgroups)
 9. [Labels](#labels)
 10. [Board Activity](#board-activity)
-11. [Alarms and reminders](#alarms-and-reminders)
-12. [Note widgets](#note-widgets)
-13. [Note Explorer](#note-explorer)
-14. [Board Structure diagram](#board-structure-diagram)
-15. [Trash](#trash)
-16. [Archive](#archive)
-17. [Password lock (encryption)](#password-lock-encryption)
-18. [Board appearance](#board-appearance)
-19. [Data file compression](#data-file-compression)
-20. [Sound effects](#sound-effects)
-21. [Language](#language)
-22. [What's new after an update](#whats-new-after-an-update)
-23. [Data file format](#data-file-format)
-24. [Screenshots](#screenshots)
-25. [Version history](#version-history)
-26. [Support the project](#support-the-project)
-27. [Development](#development)
+11. [Goals](#goals)
+12. [Alarms and reminders](#alarms-and-reminders)
+13. [Note widgets](#note-widgets)
+14. [Note Explorer](#note-explorer)
+15. [Board Structure diagram](#board-structure-diagram)
+16. [Trash](#trash)
+17. [Archive](#archive)
+18. [Password lock (encryption)](#password-lock-encryption)
+19. [Board appearance](#board-appearance)
+20. [Data file compression](#data-file-compression)
+21. [Sound effects](#sound-effects)
+22. [Language](#language)
+23. [What's new after an update](#whats-new-after-an-update)
+24. [Data file format](#data-file-format)
+25. [Screenshots](#screenshots)
+26. [Version history](#version-history)
+27. [Support the project](#support-the-project)
+28. [Development](#development)
 
 ---
 
@@ -94,6 +95,7 @@ The top bar contains, from left to right:
 | **Alarms** | Opens the [alarm list](#alarms-and-reminders) — every note with an alarm set, at a glance. |
 | **Explore notes** | Opens the [Note Explorer](#note-explorer) — a searchable, collapsible overview of every note by category/group/subgroup. |
 | **Board structure** | Opens the [Board Structure diagram](#board-structure-diagram) — a read-only flowchart of your categories, groups and subgroups. |
+| **Goals** | Opens the [Goals](#goals) window: your daily, weekly, monthly and yearly goals with their progress, and your medals. It shows today's completed daily goals (for example **2/4**). Can be turned off in the settings. |
 | **Archive** | Opens the [archive](#archive) window. |
 | **Trash** | Opens the [trash](#trash) window. |
 | **Close Quick Notes Board** | Closes the board (same as clicking the ribbon icon again). |
@@ -192,6 +194,7 @@ Above every table in a note's preview there is a small **table icon** (left-alig
 | Beside each row | **+** | Inserts an empty row right below it. On the header row it adds the first row of data. |
 | Beside each row | **🎨** | The same window for the whole row. Not on the header row: its color is chosen at the top. |
 | Bottom right corner | handle | Drag it to make the window wider or taller; the grid takes the extra space, which is handy for wide tables. |
+| Bottom | **Undo** | Takes back the last change (deletion, move, insertion, color or typed text), one step per press, up to 50 steps. Disabled when there is nothing to undo. |
 | Bottom | **Cancel** (or Esc) | Closes the window and discards every change. |
 | Bottom | **Save table** | Writes the changes into the note. |
 
@@ -302,6 +305,67 @@ The toolbar's "Activity" button opens a resizable window with two bar charts, br
 At the bottom-left of the window, the **"Hide days with no activity"** toggle removes every day with no notes created and no characters written from both charts, so they show only the days you actually worked (bars are capped to a sensible width when few days remain, and a message is shown if the month has no activity at all). The totals are unaffected, and the toggle's state is remembered.
 
 Next to it, the **"Show modified notes"** toggle swaps the first chart for **notes modified per day**, on the same calendar (the characters chart stays as is, and the monthly total changes accordingly). Like the other toggle, its state is remembered between openings. Modifications come from a dedicated daily activity log — not from each note's last-modified date, which would only remember the latest edit — so a note edited on several different days appears on every one of them. Each note counts once per day, however many times it's saved; saving changed text, ticking a checklist item, and resizing an embedded image count, while locking, moving, or recategorizing a note doesn't. History from before this version can't be reconstructed: the log starts from each existing note's last known modification, and is accurate from then on. The log lives in the plugin's `data.json` (not in the notes file), and keeps past activity even if a note is later trashed.
+
+---
+
+## Goals
+
+![Goals list and goal creation window](Screenshot09.jpg)
+
+Goals are not a game: they are a simple way to spur you on to do better. The idea came from reading a book about dopamine. Having a target to reach motivates us to put effort into whatever we do, and reaching it is a reward that makes us want to keep going. Here it works like this: you set your targets, the board keeps count by itself, and every goal you reach earns you a **medal**. They are there to give you a small push to write and keep your notes in order, a little every day.
+
+The **Goals** button in the toolbar opens the window, with one tab per period (**Today**, **Week**, **Month**, **Year**) and a **Medals** tab. The window can be resized with the handle in its bottom-right corner (the board remembers its size), so you can place it wherever suits you best. Each goal shows a progress bar, the count (for example `3/5`) and a check mark when it is done. On the button itself you see today's daily goals completed, such as **2/4**; when all are done it turns gold.
+
+### Creating a goal
+
+Press **New** and choose:
+
+| Field | Meaning |
+|---|---|
+| **Name** | Optional. If left empty, the goal is named automatically, for example "Create new notes: 5 per day". |
+| **What do I have to do?** | Create new notes, edit different notes, write characters, delete notes, archive notes, assign labels, create an alarm, finish a Pomodoro, or days with activity (a day counts if you did any of these). |
+| **How many…?** | The number to reach, from 1 to 9,999,999. The question changes with the action: "How many characters?" for writing, "How many notes?", "How many labels?" and so on. |
+| **In which period?** | Per day, per week (Monday to Sunday), per month or per year. |
+| **Only for the category** | Optional, for creating and editing notes: count only the notes of one category. |
+| **Only for the label** | Optional, for assigning labels: count only one label (for example "assign 3 *Urgent* labels per day"); left on "Any", every label counts. |
+
+You can create as many goals as you like, edit them with the pencil and delete them with the bin (press it twice to confirm). If you change a goal in the middle of a period, the progress already made stays.
+
+### What counts
+
+- **Create new notes** counts the notes created in the period that are still on the board (a note sent to the trash is not counted).
+- **Edit different notes** counts how many *different* notes you changed in the period: editing the same note ten times counts once.
+- **Write characters** counts the characters you add to your notes: those of a new note when you create it, and the characters added each time you finish editing a note (deleted text is not subtracted, and encrypted notes are not counted).
+- **Delete notes** counts the notes you send to the trash.
+- **Assign labels** counts each time you turn a label on for a note.
+- **Create an alarm** counts the notes that get an alarm for the first time (changing an alarm that already exists does not count).
+- **Archive notes** and **Finish a Pomodoro** count each time you do it.
+- Progress is worked out from what you did in the current period, even before you created the goal, as far as the board has a record of it: notes created and edited. The other actions (characters, deleted notes, labels, alarms, archived notes and Pomodoros) are counted from the moment this feature is in place.
+
+### Medals and streaks
+
+Reaching a goal in a period earns one medal for that goal and that period, and a large window opens in the middle of the screen with fireworks and the goals you have just reached; you close it with the **Congratulations** button. The medal is **bronze** for daily goals, **silver** for weekly, **gold** for monthly and a **trophy** for yearly ones. Each goal can be earned again in every new period.
+
+![Goal reached screenshot](Screenshot10.jpg)
+
+The **Medals** tab shows how many you have of each kind, your **streak** (the consecutive days, up to today, in which you completed at least one daily goal; if you skip a day, it starts again) and your best streak, and a few **milestones** that unlock along the way (first goal, 10 and 100 goals, streaks of 3, 7 and 30 days). Medals stay even if you delete or change the goal.
+
+### Managing goals
+
+The **Manage** button at the bottom left of the Goals window offers four options, each asking for confirmation and telling you how many items are involved:
+
+| Option | Effect |
+|---|---|
+| **Delete this tab's goals** | Deletes the goals of the period you are looking at (not shown on the Medals tab). Medals stay. |
+| **Delete all goals** | Deletes every goal. Medals stay. |
+| **Reset medals and streak** | Removes all medals and the streak, and keeps your goals. Goals already completed in the current period do not earn a new medal. |
+| **Reset everything** | Deletes the goals, the medals, the streak and the counters. It cannot be undone. |
+
+### Settings
+
+In the settings, the **Goals** section lets you turn the whole feature off (the button disappears and nothing is counted or saved), hide the counter on the button, turn off the celebration window, and turn off the built-in sound. That sound is included in the plugin, so it needs no file; in **Sound effects** you can choose your own sound for reaching a goal instead (it takes priority), and one for opening the window.
+
+Goals, medals and the daily counters are saved in the plugin's `data.json`, not in your notes file, and they are light: nothing runs in the background; the progress is calculated only when you do something that can change it or when you open the window.
 
 ---
 
@@ -631,6 +695,11 @@ If [data compression](#data-file-compression) is enabled, the file instead start
 
 ## Version history
 
+### 1.1.5
+
+- New: **Goals**, a small reward system. The new **Goals** button in the toolbar opens a window where you create your own goals: what to do (create new notes, edit different notes, write characters, delete notes, archive notes, assign labels, create an alarm, finish a Pomodoro, days with activity), how many times, and per day, week, month or year, optionally only for one category. The window can be resized, and it remembers its size. The **Manage** button deletes goals or resets medals, always asking for confirmation. The board counts by itself, shows a progress bar for each goal and, when you reach one, shows a large celebration window with fireworks (closed with **Congratulations**), a celebration sound, and gives you a **medal** (bronze for daily goals, silver for weekly, gold for monthly, trophy for yearly). The **Medals** tab shows your medals, your **streak** of consecutive days and a few **milestones**. The button shows today's completed daily goals (for example 2/4). It is light: nothing runs in the background, and in the settings (**Goals**) you can turn it all off, hide the counter or the celebration window; two sounds can be chosen in **Sound effects**. See the **Goals** section of the README.
+- New: **Undo** button in the table editor, at the bottom next to Cancel and Save table. Each press takes back the last change: a deletion, a move, an inserted row or column, a color, or the text typed in a cell (what you type in the same cell counts as one step). You can press it several times to go back further (up to 50 steps); it is disabled when there is nothing left to undo. It never asks for confirmation, and Cancel still discards everything.
+
 ### 1.1.4
 
 - New: **Row and column colors** in the table editor. The palette button above each column and beside each row opens a small window: a preview of the cells, the colors you used last (the last one chosen is offered first, even after a restart), a field for a color code, **More colors…** for the system color picker, **Remove color**, **Cancel** and **Confirm** (Enter confirms). The first row's color is chosen in the same window, with the **Choose…** button next to it. The color is shown softly, so the text stays readable in both light and dark themes, while the first row keeps its solid color; where a row and a column cross, the row's color wins. Colors follow their row or column when you move, insert or delete it, and show in the note's preview as well. They are saved in the same invisible comment above the table, for example `<!-- qnb-table header=#4a90d9 cols=2:#ffd966 rows=1:#f4cccc -->`; if you add or remove rows by hand in text mode, the colors can shift by one position.
@@ -788,6 +857,11 @@ Automatically rebuilds on every change to the source files (`main.ts`, `view.ts`
 | `changelog.ts` | The news shown in the "What's new" window after an update, and the logic deciding which versions to show (no dependency on Obsidian). |
 | `widgets.ts` | The note widgets: option parsing, the five widgets, their saved state and the shared timer (no dependency on Obsidian). |
 | `tables.ts` | Markdown tables of the notes: finding them in the text, reading, rewriting and the row/column operations (no dependency on Obsidian). |
+| `goals.ts` | The goals: periods, progress, medals and streaks (no dependency on Obsidian). |
+| `goalsModal.ts` | The Goals window and the window to create or edit a goal. |
+| `goalsCelebration.ts` | The celebration window shown when a goal is reached. |
+| `fireworks.ts` | The fireworks animation of that window (no dependency on Obsidian). |
+| `goalsSound.ts`, `goalsSoundData.ts` | The celebration sound included in the plugin (embedded in the code, because only `main.js`, `manifest.json` and `styles.css` are installed). |
 | `snooze.ts` | The quick-snooze durations and the deadline calculation (no dependency on Obsidian). |
 | `gradient.ts` | The category background-gradient directions, color validation and CSS generation (no dependency on Obsidian). |
 | `i18n.ts` | Translation dictionaries (IT/EN) and the translation function. |

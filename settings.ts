@@ -116,6 +116,7 @@ export type QnbSoundEventId =
 	| "toolbar-note-explorer"
 	| "toolbar-board-structure"
 	| "toolbar-trash"
+	| "toolbar-goals"
 	| "toolbar-close"
 	| "dialog-new-note"
 	| "dialog-change-category"
@@ -132,6 +133,8 @@ export type QnbSoundEventId =
 	| "dialog-note-explorer"
 	| "dialog-label-assign"
 	| "dialog-board-structure"
+	| "dialog-goals"
+	| "goal-reached"
 	| "dialog-new-note-confirm"
 	| "dialog-change-category-confirm"
 	| "dialog-font-size-close"
@@ -186,6 +189,7 @@ export const SOUND_EVENT_GROUPS: {
 			{ id: "toolbar-note-explorer", labelKey: "settings.sounds.event.toolbarNoteExplorer" },
 			{ id: "toolbar-board-structure", labelKey: "settings.sounds.event.toolbarBoardStructure" },
 			{ id: "toolbar-trash", labelKey: "settings.sounds.event.toolbarTrash" },
+			{ id: "toolbar-goals", labelKey: "settings.sounds.event.toolbarGoals" },
 			{ id: "toolbar-close", labelKey: "settings.sounds.event.toolbarClose" },
 		],
 	},
@@ -207,6 +211,7 @@ export const SOUND_EVENT_GROUPS: {
 			{ id: "dialog-note-explorer", labelKey: "settings.sounds.event.dialogNoteExplorer" },
 			{ id: "dialog-label-assign", labelKey: "settings.sounds.event.dialogLabelAssign" },
 			{ id: "dialog-board-structure", labelKey: "settings.sounds.event.dialogBoardStructure" },
+			{ id: "dialog-goals", labelKey: "settings.sounds.event.dialogGoals" },
 		],
 	},
 	{
@@ -225,6 +230,10 @@ export const SOUND_EVENT_GROUPS: {
 	{
 		headingKey: "settings.sounds.group.widgets",
 		events: [{ id: "widget-pomodoro-end", labelKey: "settings.sounds.event.widgetPomodoroEnd" }],
+	},
+	{
+		headingKey: "settings.sounds.group.goals",
+		events: [{ id: "goal-reached", labelKey: "settings.sounds.event.goalReached" }],
 	},
 ];
 
@@ -336,6 +345,17 @@ export interface QuickNotesBoardSettings {
 	lastSnoozeMinutes: number;
 	/** Ultimi colori scelti per righe e colonne delle tabelle (il più recente per primo). */
 	tableRecentColors: string[];
+	/** Obiettivi: se false il pulsante nella barra non compare e nulla viene calcolato. */
+	goalsEnabled: boolean;
+	/** Mostra sul pulsante Obiettivi quanti obiettivi giornalieri sono completati (es. 2/4). */
+	goalsShowProgress: boolean;
+	/** Avviso animato sulla board quando un obiettivo viene raggiunto. */
+	goalsCelebration: boolean;
+	/** Se nessun suono è stato scelto per "Obiettivo raggiunto", suona quello incluso nel plugin. */
+	goalsDefaultSound: boolean;
+	/** Dimensione (px) della finestra Obiettivi dopo un ridimensionamento; 0 = misura predefinita. */
+	goalsWindowWidth: number;
+	goalsWindowHeight: number;
 	boardStructureWindowWidth: number;
 	boardStructureWindowHeight: number;
 	/** Cartella del vault dove creare i file quando si trasforma una quick note in nota vera; vuota = radice del vault. */
@@ -393,6 +413,12 @@ export const DEFAULT_SETTINGS: QuickNotesBoardSettings = {
 	activityChartShowModified: false,
 	lastSnoozeMinutes: 10,
 	tableRecentColors: [],
+	goalsEnabled: true,
+	goalsShowProgress: true,
+	goalsCelebration: true,
+	goalsDefaultSound: true,
+	goalsWindowWidth: 0,
+	goalsWindowHeight: 0,
 	boardStructureWindowWidth: 1000,
 	boardStructureWindowHeight: 600,
 	convertedNotesFolder: "",
@@ -772,6 +798,63 @@ export class QuickNotesBoardSettingTab extends PluginSettingTab {
 							.onChange(async (value) => {
 								await this.plugin.setNoteShadowIntensity(value);
 							})
+					);
+				},
+			},
+			{
+				name: this.tr("settings.goals.heading"),
+				render: (setting: Setting) => {
+					setting.setHeading();
+				},
+			},
+			{
+				name: this.tr("settings.goals.enabled.name"),
+				desc: this.tr("settings.goals.enabled.desc"),
+				render: (setting: Setting) => {
+					setting.addToggle((toggle) =>
+						toggle.setValue(this.plugin.settings.goalsEnabled).onChange(async (value) => {
+							await this.plugin.setGoalsEnabled(value);
+							this.refreshDomState();
+						})
+					);
+				},
+			},
+			{
+				name: this.tr("settings.goals.showProgress.name"),
+				desc: this.tr("settings.goals.showProgress.desc"),
+				visible: () => this.plugin.settings.goalsEnabled,
+				render: (setting: Setting) => {
+					setting.addToggle((toggle) =>
+						toggle.setValue(this.plugin.settings.goalsShowProgress).onChange(async (value) => {
+							await this.plugin.setGoalsShowProgress(value);
+							this.refreshDomState();
+						})
+					);
+				},
+			},
+			{
+				name: this.tr("settings.goals.celebration.name"),
+				desc: this.tr("settings.goals.celebration.desc"),
+				visible: () => this.plugin.settings.goalsEnabled,
+				render: (setting: Setting) => {
+					setting.addToggle((toggle) =>
+						toggle.setValue(this.plugin.settings.goalsCelebration).onChange(async (value) => {
+							await this.plugin.setGoalsCelebration(value);
+							this.refreshDomState();
+						})
+					);
+				},
+			},
+			{
+				name: this.tr("settings.goals.defaultSound.name"),
+				desc: this.tr("settings.goals.defaultSound.desc"),
+				visible: () => this.plugin.settings.goalsEnabled,
+				render: (setting: Setting) => {
+					setting.addToggle((toggle) =>
+						toggle.setValue(this.plugin.settings.goalsDefaultSound).onChange(async (value) => {
+							await this.plugin.setGoalsDefaultSound(value);
+							this.refreshDomState();
+						})
 					);
 				},
 			},

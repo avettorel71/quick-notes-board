@@ -619,6 +619,7 @@ export class ArchiveModal extends Modal {
 						note.archived = false;
 						this.plugin.playSound("archive-send-to-trash");
 						await this.persistAndRefresh();
+						this.plugin.goalEvent("delete");
 					})
 			);
 		}
@@ -1032,6 +1033,9 @@ function mountNoteWindowBar(modal: Modal, plugin: QuickNotesBoardPlugin, categor
 	return true;
 }
 
+/** Quanti passi indietro tiene "Ripristina" nella finestra della tabella. */
+const UNDO_LIMIT = 50;
+
 /** Finestra a griglia per modificare una tabella Markdown di una nota: celle, righe e colonne
  * (aggiungi, sposta, elimina) e colori (prima riga, singole righe e colonne). Lavora su una copia:
  * la tabella della nota cambia solo con "Salva tabella". */
@@ -1047,6 +1051,11 @@ export class TableEditModal extends Modal {
 	private infoEl!: HTMLElement;
 	/** Quadratino con il colore attuale della prima riga, accanto al pulsante per cambiarlo. */
 	private headerSwatch!: HTMLElement;
+	/** Stati precedenti della tabella (con la cella selezionata), dal più vecchio al più recente. */
+	private undoStack: { table: QnbTable; selRow: number; selCol: number }[] = [];
+	private undoBtn!: ButtonComponent;
+	/** Vero mentre si scrive nella stessa cella: una serie di battute è un solo passo indietro. */
+	private typing = false;
 
 	constructor(
 		app: App,
@@ -1087,6 +1096,10 @@ export class TableEditModal extends Modal {
 		this.infoEl = contentEl.createEl("p", { cls: "setting-item-description qnb-table-edit-info" });
 
 		new Setting(contentEl)
+			.addButton((btn) => {
+				this.undoBtn = btn;
+				btn.setButtonText(this.tr("modal.tableEdit.undo")).setIcon("undo-2").onClick(() => this.undo());
+			})
 			.addButton((btn) => btn.setButtonText(this.tr("modal.tableEdit.cancel")).onClick(() => this.close()))
 			.addButton((btn) =>
 				btn
@@ -1098,8 +1111,33 @@ export class TableEditModal extends Modal {
 					})
 			);
 
+		this.updateUndoButton();
 		this.renderGrid();
 		this.addResizeGrip();
+	}
+
+	/** Salva lo stato attuale prima di una modifica, per poterla annullare con "Ripristina". */
+	private pushUndo() {
+		this.typing = false;
+		this.undoStack.push({ table: cloneTable(this.table), selRow: this.selRow, selCol: this.selCol });
+		if (this.undoStack.length > UNDO_LIMIT) this.undoStack.shift();
+		this.updateUndoButton();
+	}
+
+	/** Torna allo stato prima dell'ultima modifica (eliminazione, spostamento, aggiunta, colore o testo). */
+	private undo() {
+		const prev = this.undoStack.pop();
+		if (!prev) return;
+		this.typing = false;
+		this.table = prev.table;
+		this.selRow = prev.selRow;
+		this.selCol = prev.selCol;
+		this.updateUndoButton();
+		this.renderGrid({ r: this.selRow, c: this.selCol });
+	}
+
+	private updateUndoButton() {
+		this.undoBtn.setDisabled(this.undoStack.length === 0);
 	}
 
 	/** Maniglia in basso a destra: allarga e allunga la finestra, e la griglia prende lo spazio
@@ -1156,6 +1194,8 @@ export class TableEditModal extends Modal {
 	}
 
 	private setColor(kind: "header" | "col" | "row", slot: number, hex: string) {
+		if (hex === this.getColor(kind, slot)) return;
+		this.pushUndo();
 		if (kind === "header") this.table.headerColor = hex;
 		else (kind === "col" ? this.table.colColors : this.table.rowColors)[slot] = hex;
 		this.applyColors();
@@ -1208,21 +1248,25 @@ export class TableEditModal extends Modal {
 		for (let c = 0; c < cols; c++) {
 			const td = ctlRow.createEl("td", { cls: "qnb-table-edit-ctl" });
 			this.iconButton(td, "arrow-left", this.tr("modal.tableEdit.moveLeft"), c === 0, () => {
+				this.pushUndo();
 				moveColumn(this.table, c, -1);
 				this.selCol = c - 1;
 				this.renderGrid({ r: this.selRow, c: this.selCol });
 			});
 			this.iconButton(td, "arrow-right", this.tr("modal.tableEdit.moveRight"), c === cols - 1, () => {
+				this.pushUndo();
 				moveColumn(this.table, c, 1);
 				this.selCol = c + 1;
 				this.renderGrid({ r: this.selRow, c: this.selCol });
 			});
 			this.iconButton(td, "x", this.tr("modal.tableEdit.deleteCol"), cols <= 1, () => {
+				this.pushUndo();
 				deleteColumn(this.table, c);
 				this.selCol = Math.min(c, this.table.header.length - 1);
 				this.renderGrid({ r: this.selRow, c: this.selCol });
 			});
 			this.iconButton(td, "plus", this.tr("modal.tableEdit.insertColAfter"), false, () => {
+				this.pushUndo();
 				insertColumn(this.table, c + 1);
 				this.selCol = c + 1;
 				this.renderGrid({ r: this.selRow, c: this.selCol });
@@ -1235,16 +1279,19 @@ export class TableEditModal extends Modal {
 			const ctl = tr.createEl("td", { cls: "qnb-table-edit-ctl" });
 			if (r >= 1) {
 				this.iconButton(ctl, "arrow-up", this.tr("modal.tableEdit.moveUp"), r === 1, () => {
+					this.pushUndo();
 					moveRow(this.table, r, -1);
 					this.selRow = r - 1;
 					this.renderGrid({ r: this.selRow, c: this.selCol });
 				});
 				this.iconButton(ctl, "arrow-down", this.tr("modal.tableEdit.moveDown"), r === rowCount - 1, () => {
+					this.pushUndo();
 					moveRow(this.table, r, 1);
 					this.selRow = r + 1;
 					this.renderGrid({ r: this.selRow, c: this.selCol });
 				});
 				this.iconButton(ctl, "x", this.tr("modal.tableEdit.deleteRow"), false, () => {
+					this.pushUndo();
 					deleteRow(this.table, r);
 					this.selRow = Math.min(r, this.table.rows.length);
 					this.renderGrid({ r: this.selRow, c: this.selCol });
@@ -1255,6 +1302,7 @@ export class TableEditModal extends Modal {
 				for (let i = 0; i < 3; i++) ctl.createSpan({ cls: "qnb-table-edit-ctl-spacer" });
 			}
 			this.iconButton(ctl, "plus", this.tr("modal.tableEdit.insertRowBelow"), false, () => {
+				this.pushUndo();
 				insertRow(this.table, r + 1);
 				this.selRow = r + 1;
 				this.renderGrid({ r: this.selRow, c: this.selCol });
@@ -1271,10 +1319,15 @@ export class TableEditModal extends Modal {
 				input.dataset.c = String(c);
 				input.value = r === 0 ? this.table.header[c] : this.table.rows[r - 1][c];
 				input.addEventListener("input", () => {
+					if (!this.typing) {
+						this.pushUndo();
+						this.typing = true;
+					}
 					if (r === 0) this.table.header[c] = input.value;
 					else this.table.rows[r - 1][c] = input.value;
 				});
 				input.addEventListener("focus", () => {
+					this.typing = false;
 					this.selRow = r;
 					this.selCol = c;
 					this.updateSelection();
@@ -2756,6 +2809,9 @@ export class DueDateModal extends Modal {
 	private skipWeekends: boolean;
 	private multipleTimesEnabled: boolean;
 	private multipleTimes: string[];
+	/** Vero se la nota aveva già un allarme quando la finestra si è aperta: salvarlo di nuovo
+	 * non conta come "creare una sveglia" negli obiettivi. */
+	private hadAlarm: boolean;
 
 	constructor(app: App, plugin: QuickNotesBoardPlugin, note: QuickNote, onSaved: () => void) {
 		super(app);
@@ -2763,6 +2819,7 @@ export class DueDateModal extends Modal {
 		this.lang = plugin.settings.language;
 		this.note = note;
 		this.onSaved = onSaved;
+		this.hadAlarm = !!note.dueDate;
 		this.dueDate = note.dueDate || "";
 		this.remStartDate = note.reminderStartDate || note.dueDate || "";
 		this.remStartTime = note.reminderStartTime || "09:00";
@@ -2963,6 +3020,7 @@ export class DueDateModal extends Modal {
 					await this.plugin.saveNotes();
 					this.onSaved();
 					this.close();
+					if (!this.hadAlarm) this.plugin.goalEvent("alarm");
 				})
 		);
 		if (this.note.dueDate) {
@@ -3607,6 +3665,7 @@ export class LabelAssignModal extends Modal {
 							this.note.labelIds = current.size > 0 ? Array.from(current) : undefined;
 							await this.plugin.saveNotes();
 							this.onSaved();
+							if (value) this.plugin.goalEvent("label", 1, label.id);
 						})
 					);
 			}

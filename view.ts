@@ -6,6 +6,8 @@ import { NewNoteModal, LabelsManagerModal, ChangeCategoryModal, FontSizeModal, T
 import { t } from "./i18n";
 import type { QnbCategory, QnbGroup, QnbNoteIconId } from "./settings";
 import { cellColor, findTables, isEditableSize, replaceTableInContent, tabularTextToMarkdown, tintColor } from "./tables";
+import { GoalsModal } from "./goalsModal";
+import { todayStatus } from "./goals";
 import { encryptText, decryptText, DecryptionError } from "./crypto";
 import { SNOOZE_OPTIONS_MINUTES, formatSnoozeLabel, normalizeSnoozeMinutes } from "./snooze";
 
@@ -48,6 +50,9 @@ export class QuickNotesBoardView extends ItemView {
 	/** Id della nota attualmente massimizzata, o null se nessuna lo è. */
 	private maximizedNoteId: string | null = null;
 	private toggleAllBtn: HTMLElement | null = null;
+	/** Pulsante Obiettivi e la sua scritta di avanzamento (null se gli obiettivi sono spenti). */
+	private goalsBtn: HTMLElement | null = null;
+	private goalsBadgeEl: HTMLElement | null = null;
 	private favoritesRowEl: HTMLElement | null = null;
 	private labelsRowEl: HTMLElement | null = null;
 	/** Etichette attualmente selezionate come filtro: una nota deve averle TUTTE per
@@ -145,6 +150,18 @@ export class QuickNotesBoardView extends ItemView {
 	private clearSelectionOnEscapeBound = (evt: KeyboardEvent) => {
 		if (evt.key === "Escape" && this.selectedNoteIds.size > 0) this.clearSelection();
 	};
+
+	/** Aggiorna la scritta sul pulsante Obiettivi (es. "2/4" o "✓ 4/4") e il suo colore. */
+	updateGoalsButton() {
+		const btn = this.goalsBtn;
+		const badge = this.goalsBadgeEl;
+		if (!btn || !badge) return;
+		const { done, total } = todayStatus(this.plugin.goals, Date.now());
+		const show = this.plugin.settings.goalsShowProgress && total > 0;
+		badge.setText(show ? `${done === total ? "✓ " : ""}${done}/${total}` : "");
+		badge.toggleClass("is-hidden", !show);
+		btn.toggleClass("is-complete", show && done === total);
+	}
 
 	/** Ridisegna tutto da zero: toolbar (testi/lingua) + board. Usato anche quando cambiano le impostazioni. */
 	refresh() {
@@ -395,6 +412,21 @@ export class QuickNotesBoardView extends ItemView {
 			this.plugin.playSound("toolbar-board-structure");
 			new BoardStructureModal(this.app, this.plugin).open();
 		});
+
+		if (this.plugin.settings.goalsEnabled) {
+			this.goalsBtn = toolbar.createEl("button", { cls: "qnb-btn qnb-goals-btn" });
+			setIcon(this.goalsBtn.createSpan({ cls: "qnb-btn-icon" }), "trophy");
+			this.goalsBtn.createSpan({ text: this.tr("view.goals") });
+			this.goalsBadgeEl = this.goalsBtn.createSpan({ cls: "qnb-goals-badge" });
+			this.updateGoalsButton();
+			this.goalsBtn.addEventListener("click", () => {
+				this.plugin.playSound("toolbar-goals");
+				new GoalsModal(this.app, this.plugin).open();
+			});
+		} else {
+			this.goalsBtn = null;
+			this.goalsBadgeEl = null;
+		}
 
 		const closeBtn = toolbar.createEl("button", { cls: "qnb-btn qnb-btn-close" });
 		setIcon(closeBtn.createSpan({ cls: "qnb-btn-icon" }), "x");
@@ -1014,6 +1046,8 @@ export class QuickNotesBoardView extends ItemView {
 			};
 			this.plugin.notes.push(note);
 			await this.plugin.saveNotes();
+			this.plugin.goalEvent("create");
+			this.plugin.goalEvent("chars", note.content.length);
 			this.refreshVisibilityButtons();
 			this.renderBoard();
 			})();
@@ -1032,6 +1066,7 @@ export class QuickNotesBoardView extends ItemView {
 		if (idx !== -1) this.noteOrder.splice(idx, 1);
 		this.plugin.playSound("note-archive");
 		await this.plugin.saveNotes();
+		this.plugin.goalEvent("archive");
 		this.refreshVisibilityButtons();
 		this.renderBoard();
 	}
@@ -1042,6 +1077,7 @@ export class QuickNotesBoardView extends ItemView {
 		if (idx !== -1) this.noteOrder.splice(idx, 1);
 		this.plugin.playSound("note-delete");
 		await this.plugin.saveNotes();
+		this.plugin.goalEvent("delete");
 		this.refreshVisibilityButtons();
 		this.renderBoard();
 	}
@@ -1065,6 +1101,7 @@ export class QuickNotesBoardView extends ItemView {
 		copy.reminderLastFired = undefined;
 		this.plugin.notes.push(copy);
 		await this.plugin.saveNotes();
+		this.plugin.goalEvent("create");
 		this.refreshVisibilityButtons();
 		this.renderBoard();
 	}
@@ -1266,6 +1303,7 @@ export class QuickNotesBoardView extends ItemView {
 		const count = this.selectedNoteIds.size;
 		this.selectedNoteIds.clear();
 		await this.plugin.saveNotes();
+		this.plugin.goalEvent("archive", count);
 		this.refreshVisibilityButtons();
 		this.renderBoard();
 		new Notice(this.tr("view.selection.archivedDone", { count: String(count) }));
@@ -1325,6 +1363,7 @@ export class QuickNotesBoardView extends ItemView {
 		const count = this.selectedNoteIds.size;
 		this.selectedNoteIds.clear();
 		await this.plugin.saveNotes();
+		this.plugin.goalEvent("delete", count);
 		this.refreshVisibilityButtons();
 		this.renderBoard();
 		new Notice(this.tr("view.selection.trashedDone", { count: String(count) }));
@@ -1746,6 +1785,7 @@ export class QuickNotesBoardView extends ItemView {
 						if (idx !== -1) this.noteOrder.splice(idx, 1);
 						this.plugin.playSound("note-archive");
 						await this.plugin.saveNotes();
+						this.plugin.goalEvent("archive");
 						this.refreshVisibilityButtons();
 						this.renderBoard();
 					})();
@@ -1838,6 +1878,7 @@ export class QuickNotesBoardView extends ItemView {
 						if (idx !== -1) this.noteOrder.splice(idx, 1);
 						this.plugin.playSound("note-delete");
 						await this.plugin.saveNotes();
+						this.plugin.goalEvent("delete");
 						this.refreshVisibilityButtons();
 						this.renderBoard();
 					})();
@@ -2817,10 +2858,12 @@ export class QuickNotesBoardView extends ItemView {
 			const newContent = textarea.value;
 			noteEl.removeClass("is-editing");
 			if (newContent !== note.content) {
+				const added = note.encrypted ? 0 : newContent.length - note.content.length;
 				note.content = newContent;
 				note.modifiedAt = Date.now();
 				this.plugin.recordNoteModified(note.id);
 				await this.plugin.saveNotes();
+				this.plugin.goalEvent("chars", added);
 			}
 			this.renderNoteBodyPreview(bodyEl, note, noteEl, toggleBtn);
 		};
