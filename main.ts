@@ -191,6 +191,9 @@ export interface QuickNote {
 	 * scadere l'allarme torna normale e il campo viene azzerato. Assente = nessun
 	 * posticipo. Nel file è salvato in secondi ("remsnooze"). */
 	reminderSnoozeUntil?: number;
+	/** Se true, l'allarme è disattivato a mano: resta salvato con tutte le sue impostazioni ma non
+	 * suona, non lampeggia e non invia notifiche, e non avanza da solo. Nel file: "remoff". */
+	reminderDisabled?: boolean;
 	/** Id delle etichette assegnate a questa nota (elenco piatto, definito in
 	 * Impostazioni). Una nota può averne quante ne vuole insieme. */
 	labelIds?: string[];
@@ -306,7 +309,7 @@ interface QnbPluginDataFile {
 }
 
 /** Azioni che hanno un contatore giornaliero proprio (le altre si leggono dai dati della board). */
-const COUNTER_ACTIONS: readonly GoalAction[] = ["archive", "pomodoro", "delete", "alarm", "chars", "label"];
+const COUNTER_ACTIONS: readonly GoalAction[] = ["archive", "pomodoro", "delete", "alarm", "alarmOff", "alarmOn", "moveNote", "resizeNote", "closeNote", "favorite", "emptyTrash", "restoreNote", "search", "tidyUp", "viewActivity", "widget", "alarmRing", "alarmRemove", "labelAdd", "labelRemove", "labelOrganize", "duplicate", "changeCategory", "chars", "label"];
 
 export default class QuickNotesBoardPlugin extends Plugin {
 	notes: QuickNote[] = [];
@@ -326,6 +329,9 @@ export default class QuickNotesBoardPlugin extends Plugin {
 	 * così una raffica di azioni (es. archiviare 30 note) costa un solo calcolo. */
 	private goalActionsPending = new Set<GoalAction>();
 	private goalFlushTimer: number | null = null;
+	/** Ricerca in corso di digitazione: conta una sola volta, a digitazione ferma. */
+	private goalSearchTimer: number | null = null;
+	private goalSearchLast = "";
 	private goalsDirty = false;
 	private goalSaveTimer: number | null = null;
 	private celebration: GoalCelebrationModal | null = null;
@@ -361,6 +367,7 @@ export default class QuickNotesBoardPlugin extends Plugin {
 		},
 		persist: () => void this.saveSettings(),
 		notifyPomodoro: (info) => this.notifyPomodoro(info),
+		used: () => this.goalEvent("widget"),
 	});
 	/** Finché lo stato dei widget non è stato letto da disco non va mai scritto. */
 	private widgetStateLoaded = false;
@@ -452,6 +459,8 @@ export default class QuickNotesBoardPlugin extends Plugin {
 		// degli obiettivi in attesa.
 		if (this.goalFlushTimer !== null) window.clearTimeout(this.goalFlushTimer);
 		this.goalFlushTimer = null;
+		if (this.goalSearchTimer !== null) window.clearTimeout(this.goalSearchTimer);
+		this.goalSearchTimer = null;
 		if (this.goalSaveTimer !== null) window.clearTimeout(this.goalSaveTimer);
 		this.goalSaveTimer = null;
 		if (this.goalsDirty) this.persistGoals();
@@ -582,17 +591,41 @@ export default class QuickNotesBoardPlugin extends Plugin {
 		if (this.goalFlushTimer === null) this.goalFlushTimer = window.setTimeout(() => this.flushGoalEvents(), 500);
 	}
 
+	/** Una ricerca (campo della board o elenco delle note) conta quando si smette di digitare per
+	 * un secondo, una volta sola per testo: finché non si svuota il campo, lo stesso testo non conta
+	 * di nuovo. Ogni battuta rimette a zero l'attesa e non fa altro. */
+	goalSearch(query: string) {
+		if (!this.settings.goalsEnabled || !this.goalsLoaded) return;
+		if (this.goalSearchTimer !== null) {
+			window.clearTimeout(this.goalSearchTimer);
+			this.goalSearchTimer = null;
+		}
+		const q = query.trim().toLowerCase();
+		if (!q) {
+			this.goalSearchLast = "";
+			return;
+		}
+		this.goalSearchTimer = window.setTimeout(() => {
+			this.goalSearchTimer = null;
+			if (q === this.goalSearchLast) return;
+			this.goalSearchLast = q;
+			this.goalEvent("search");
+		}, 1000);
+	}
+
 	private flushGoalEvents() {
 		this.goalFlushTimer = null;
-		const actions = [...this.goalActionsPending];
+		const actions = new Set(this.goalActionsPending);
 		this.goalActionsPending.clear();
 		const awarded: GoalAwarded[] = [];
 		if (this.settings.goalsEnabled && this.goals.goals.length > 0) {
 			const now = Date.now();
-			for (const action of actions) awarded.push(...evaluateGoals(this.goals, this.goalSources(), now, action));
+			awarded.push(...evaluateGoals(this.goals, this.goalSources(), now, actions));
 		}
-		if (awarded.length > 0) this.persistGoals();
-		else if (this.goalsDirty) this.persistGoalsSoon();
+		if (awarded.length > 0) {
+			this.rememberGoalNames(awarded.map((a) => a.goal));
+			this.persistGoals();
+		} else if (this.goalsDirty) this.persistGoalsSoon();
 		if (awarded.length > 0) this.celebrateGoals(awarded);
 	}
 
@@ -642,7 +675,17 @@ export default class QuickNotesBoardPlugin extends Plugin {
 		}
 	}
 
+	/** Salva il nome degli obiettivi che hanno dato una medaglia: serve a leggere lo storico
+	 * anche se poi vengono eliminati. */
+	private rememberGoalNames(goals: Goal[]) {
+		for (const g of goals) this.goals.names[g.id] = this.goalDisplayName(g);
+	}
+
 	async saveGoalList(goals: Goal[]) {
+		// Gli obiettivi che spariscono dall'elenco lasciano il loro ultimo nome (solo se hanno medaglie).
+		const keep = new Set(goals.map((g) => g.id));
+		const withAwards = new Set(Object.keys(this.goals.awards).map((k) => k.slice(0, k.indexOf("|"))));
+		this.rememberGoalNames(this.goals.goals.filter((g) => !keep.has(g.id) && withAwards.has(g.id)));
 		this.goals.goals = goals;
 		await this.saveSettings();
 		this.goalsDirty = false;
@@ -658,6 +701,7 @@ export default class QuickNotesBoardPlugin extends Plugin {
 	/** Azzera medaglie e serie; gli obiettivi restano. */
 	async resetGoalMedals() {
 		resetMedals(this.goals, this.goalSources(), Date.now());
+		this.goals.names = {};
 		this.goalsDirty = false;
 		await this.saveSettings();
 		this.refreshGoalButtons();
@@ -667,6 +711,7 @@ export default class QuickNotesBoardPlugin extends Plugin {
 	async resetAllGoals() {
 		this.goals.goals = [];
 		this.goals.awards = {};
+		this.goals.names = {};
 		this.goals.counters = {};
 		this.goalsDirty = false;
 		await this.saveSettings();
@@ -683,6 +728,12 @@ export default class QuickNotesBoardPlugin extends Plugin {
 		this.settings.goalsShowProgress = show;
 		await this.saveSettings();
 		this.refreshGoalButtons();
+	}
+
+	async setAlarmListWindowSize(width: number, height: number) {
+		this.settings.alarmListWindowWidth = Math.round(width);
+		this.settings.alarmListWindowHeight = Math.round(height);
+		await this.saveSettings();
 	}
 
 	async setGoalsWindowSize(width: number, height: number) {
@@ -921,6 +972,17 @@ export default class QuickNotesBoardPlugin extends Plugin {
 	}
 
 	async setLabels(labels: QnbLabel[]) {
+		// Gli obiettivi contano solo ciò che cambia davvero: etichette nuove, tolte, o stesso
+		// insieme in un ordine diverso (rinominare o cambiare colore non conta).
+		const before = this.settings.labels.map((l) => l.id);
+		const after = labels.map((l) => l.id);
+		const beforeSet = new Set(before);
+		const afterSet = new Set(after);
+		const added = after.filter((id) => !beforeSet.has(id)).length;
+		const removed = before.filter((id) => !afterSet.has(id)).length;
+		if (added > 0) this.goalEvent("labelAdd", added);
+		if (removed > 0) this.goalEvent("labelRemove", removed);
+		if (added === 0 && removed === 0 && before.some((id, i) => id !== after[i])) this.goalEvent("labelOrganize");
 		this.settings.labels = labels;
 		await this.saveSettings();
 		this.refreshOpenViews();
@@ -1271,6 +1333,8 @@ export default class QuickNotesBoardPlugin extends Plugin {
 	 * controllo periodico che invia gli avvisi e il bordo visivo sulla board. */
 	isNoteDueActive(note: QuickNote): boolean {
 		if (!note.dueDate || note.deleted || note.archived) return false;
+		// Disattivato a mano: né suono, né bordo, né notifica.
+		if (note.reminderDisabled) return false;
 		// Posticipo rapido in corso: allarme in pausa. Essendo qui, e non nel solo invio
 		// dell'avviso, bordo lampeggiante, suono e notifica si spengono tutti insieme.
 		if (note.reminderSnoozeUntil && Date.now() < note.reminderSnoozeUntil) return false;
@@ -1407,6 +1471,8 @@ export default class QuickNotesBoardPlugin extends Plugin {
 		// sono affatto persi: l'allarme deve ancora suonare. Non avanzare finché il
 		// posticipo non è scaduto e ripreso (il campo si azzera nel controllo periodico).
 		if (note.reminderSnoozeUntil) return false;
+		// Un allarme disattivato non avanza da solo: alla riattivazione si decide cosa fare.
+		if (note.reminderDisabled) return false;
 
 		const todayStr = this.getTodayDateStr();
 		const nowHHMM = this.getCurrentHHMM();
@@ -1526,6 +1592,7 @@ export default class QuickNotesBoardPlugin extends Plugin {
 			// Finestra di dialogo (non si chiude da sola) + suono in loop: entrambi si
 			// fermano solo con "Ferma"/"Posticipa" nella finestra o dall'icona allarme della nota.
 			// Conta l'esecuzione: l'allarme sta effettivamente scattando ora.
+			this.goalEvent("alarmRing");
 			note.reminderFireCount = (note.reminderFireCount || 0) + 1;
 			note.reminderLastFired = Date.now();
 			void this.saveNotes();
@@ -1639,6 +1706,62 @@ export default class QuickNotesBoardPlugin extends Plugin {
 		await this.saveNotes();
 		this.refreshDueBordersInOpenViews();
 		new Notice(this.tr("modal.dueDate.postponed", { date: next.dueDate }));
+	}
+
+	/** Disattiva o riattiva l'allarme di una nota senza toccarne le impostazioni. Disattivato:
+	 * si ferma subito tutto e non suona più. Riattivato: se la data è già passata, un allarme
+	 * che si ripete salta alla prossima occorrenza (senza suonare per quelle perse), uno
+	 * senza ripetizione passa a oggi e suona come un allarme scaduto. */
+	async setAlarmEnabled(noteId: string, enabled: boolean) {
+		const note = this.notes.find((n) => n.id === noteId);
+		if (!note || !note.dueDate) return;
+		if (!enabled) {
+			note.reminderDisabled = true;
+			note.reminderSnoozeUntil = undefined;
+			this.stopDueAlarm(noteId);
+			this.resolvedAlarmSlots.delete(noteId);
+			this.dueReminderLastFired.delete(noteId);
+			this.goalEvent("alarmOff");
+			await this.saveNotes();
+			this.refreshDueBordersInOpenViews();
+			new Notice(this.tr("notice.alarmDisabled", { title: note.title }));
+			return;
+		}
+		const wasOff = !!note.reminderDisabled;
+		note.reminderDisabled = undefined;
+		const today = this.getTodayDateStr();
+		const before = note.dueDate;
+		if (note.dueDate < today) {
+			if (note.reminderRepeat) {
+				let due = note.dueDate;
+				let start = note.reminderStartDate || due;
+				let guard = 0;
+				while (due < today && guard++ < 3700) {
+					const next = computeNextSchedule(due, start, note.reminderRepeat, note.reminderRepeatEvery || 1, !!note.skipWeekends);
+					if (next.dueDate <= due) break;
+					due = next.dueDate;
+					start = next.reminderStartDate;
+				}
+				if (due < today) {
+					due = today;
+					start = today;
+				}
+				note.dueDate = due;
+				note.reminderStartDate = start;
+			} else {
+				note.dueDate = today;
+			}
+		}
+		this.resolvedAlarmSlots.delete(noteId);
+		this.dueReminderLastFired.delete(noteId);
+		if (wasOff) this.goalEvent("alarmOn");
+		await this.saveNotes();
+		this.refreshDueBordersInOpenViews();
+		new Notice(
+			note.dueDate !== before
+				? this.tr("notice.alarmEnabledMoved", { title: note.title, date: note.dueDate })
+				: this.tr("notice.alarmEnabled", { title: note.title })
+		);
 	}
 
 	/** Porta l'allarme al giorno utile successivo (rispettando "salta sabato e domenica"),
@@ -2024,6 +2147,7 @@ export default class QuickNotesBoardPlugin extends Plugin {
 				const remCountStr = attrs.get("remcount");
 				const remLastStr = attrs.get("remlast");
 				const remSnoozeStr = attrs.get("remsnooze");
+				const remOffStr = attrs.get("remoff");
 				const labelsStr = attrs.get("labels");
 				i++;
 
@@ -2090,6 +2214,7 @@ export default class QuickNotesBoardPlugin extends Plugin {
 					skipWeekends: remSkipWeekendsStr === "1" ? true : undefined,
 					reminderFireCount: remCountStr ? parseInt(remCountStr, 10) || undefined : undefined,
 					reminderLastFired: remLastStr ? (parseInt(remLastStr, 10) || 0) * 1000 || undefined : undefined,
+					reminderDisabled: remOffStr === "1" ? true : undefined,
 					reminderSnoozeUntil: remSnoozeStr ? (parseInt(remSnoozeStr, 10) || 0) * 1000 || undefined : undefined,
 					labelIds: labelsStr ? labelsStr.split(",").filter((id) => id) : undefined,
 				});
@@ -2172,6 +2297,7 @@ export default class QuickNotesBoardPlugin extends Plugin {
 						if (note.reminderRepeatEvery) optionalAttrs.push(`remrepeatevery=${note.reminderRepeatEvery}`);
 					}
 					if (note.skipWeekends) optionalAttrs.push("remskipwe=1");
+					if (note.reminderDisabled) optionalAttrs.push("remoff=1");
 					if (note.reminderFireCount) optionalAttrs.push(`remcount=${note.reminderFireCount}`);
 					if (note.reminderLastFired) optionalAttrs.push(`remlast=${Math.round(note.reminderLastFired / 1000)}`);
 					if (note.reminderSnoozeUntil && note.reminderSnoozeUntil > Date.now()) {

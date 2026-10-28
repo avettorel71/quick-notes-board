@@ -1531,8 +1531,38 @@ button.qnb-group-menu-btn {
 }
 
 .qnb-alarm-list-modal-wide {
-	width: 90vw;
-	max-width: 900px;
+	position: relative;
+	width: 95vw;
+	max-width: 1100px;
+	max-height: 96vh;
+	display: flex;
+	flex-direction: column;
+}
+
+.qnb-alarm-list-modal-wide .modal-content {
+	display: flex;
+	flex-direction: column;
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow: hidden;
+}
+
+.qnb-alarm-list-modal-wide .modal-content > :not(.qnb-alarm-scroll) {
+	flex-shrink: 0;
+}
+
+.qnb-alarm-list-modal-wide.is-resized {
+	max-width: none;
+}
+
+.qnb-alarm-scroll {
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow: auto;
+}
+
+.qnb-window-drag {
+	cursor: move;
 }
 
 .qnb-alarm-grid {
@@ -1540,8 +1570,6 @@ button.qnb-group-menu-btn {
 	width: 100%;
 	border-collapse: collapse;
 	margin: 12px 0;
-	max-height: 60vh;
-	overflow-y: auto;
 }
 
 .qnb-alarm-grid-row {
@@ -1568,6 +1596,27 @@ button.qnb-group-menu-btn {
 
 .qnb-alarm-grid-item:hover > div {
 	background: var(--background-modifier-hover);
+}
+
+.qnb-alarm-grid-item.is-disabled > div {
+	color: var(--text-faint);
+	font-style: italic;
+}
+
+.qnb-alarm-cell-status {
+	white-space: nowrap;
+}
+
+.qnb-alarm-off-banner {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin: 8px 0 4px;
+	padding: 8px 12px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 8px;
+	background: var(--background-secondary);
+	color: var(--text-muted);
 }
 
 .qnb-alarm-cell-category {
@@ -2568,11 +2617,33 @@ button.qnb-group-menu-btn {
 .qnb-goals-tile .qnb-goal-tier svg { width: 28px; height: 28px; }
 .qnb-goals-tile-count { font-size: 1.4em; font-weight: 700; }
 .qnb-goals-tile-label { font-size: 0.78em; color: var(--text-muted); }
+.qnb-goals-tile.is-clickable { cursor: pointer; }
+.qnb-goals-tile.is-clickable:hover, .qnb-goals-tile.is-clickable:focus-visible { background: var(--background-modifier-hover); border-color: var(--interactive-accent); outline: none; }
+.qnb-goals-detail-head { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; flex-wrap: wrap; }
+.qnb-goals-back { display: inline-flex; align-items: center; gap: 4px; }
+.qnb-goals-detail-title { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+.qnb-goals-detail-title .qnb-goal-tier svg { width: 22px; height: 22px; }
+.qnb-goals-detail-goal { padding: 8px 0; border-bottom: 1px solid var(--background-modifier-border); }
+.qnb-goals-detail-row { display: flex; align-items: baseline; gap: 8px; }
+.qnb-goals-detail-name { font-weight: 600; }
+.qnb-goals-detail-deleted { color: var(--text-faint); font-size: 0.85em; }
+.qnb-goals-detail-times { margin-left: auto; font-weight: 700; color: var(--text-muted); }
+.qnb-goals-detail-periods { margin: 4px 0 0 14px; display: flex; flex-direction: column; gap: 2px; color: var(--text-muted); font-size: 0.9em; }
+.qnb-goals-detail-period::before { content: "▸ "; color: var(--text-faint); }
 .qnb-goals-milestones { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 6px; }
 .qnb-goals-milestone { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border: 1px solid var(--background-modifier-border); border-radius: 8px; color: var(--text-faint); }
 .qnb-goals-milestone.is-reached { color: var(--text-normal); border-color: #e0a800; }
 .qnb-goals-milestone.is-reached .qnb-goals-milestone-icon { color: #e0a800; }
 .qnb-goals-milestone-icon { display: inline-flex; }
+.qnb-goals-milestone.is-clickable { cursor: pointer; }
+.qnb-goals-milestone.is-clickable:hover, .qnb-goals-milestone.is-clickable:focus-visible { background: var(--background-modifier-hover); border-color: var(--interactive-accent); outline: none; }
+.qnb-goal-action-btn { display: inline-flex; align-items: center; gap: 6px; }
+.qnb-goal-action-btn .qnb-btn-icon { display: inline-flex; }
+.qnb-goals-detail-sub { margin: 4px 0; color: var(--text-muted); }
+.qnb-goals-ms-bar { margin: 8px 0 4px; max-width: 360px; }
+.qnb-goals-ms-row { padding: 3px 0; align-items: center; }
+.qnb-goals-ms-row .qnb-goals-detail-name { font-weight: 400; }
+.qnb-goals-ms-row .qnb-goals-detail-times { font-weight: 400; text-align: right; }
 
 .qnb-goal-edit-modal { width: 460px; max-width: 96vw; }
 .qnb-goal-edit-modal .setting-item.is-hidden { display: none; }

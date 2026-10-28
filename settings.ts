@@ -354,6 +354,8 @@ export interface QuickNotesBoardSettings {
 	/** Se nessun suono è stato scelto per "Obiettivo raggiunto", suona quello incluso nel plugin. */
 	goalsDefaultSound: boolean;
 	/** Dimensione (px) della finestra Obiettivi dopo un ridimensionamento; 0 = misura predefinita. */
+	alarmListWindowWidth: number;
+	alarmListWindowHeight: number;
 	goalsWindowWidth: number;
 	goalsWindowHeight: number;
 	boardStructureWindowWidth: number;
@@ -417,6 +419,8 @@ export const DEFAULT_SETTINGS: QuickNotesBoardSettings = {
 	goalsShowProgress: true,
 	goalsCelebration: true,
 	goalsDefaultSound: true,
+	alarmListWindowWidth: 0,
+	alarmListWindowHeight: 0,
 	goalsWindowWidth: 0,
 	goalsWindowHeight: 0,
 	boardStructureWindowWidth: 1000,

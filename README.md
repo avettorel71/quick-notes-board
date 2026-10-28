@@ -174,6 +174,10 @@ While editing, the text stays a plain editable area (no live formatting as you t
 
 Copy a range of cells in Excel (or any spreadsheet) and paste it while editing a note: it turns into a Markdown table on its own lines, with the first row as the header and the columns aligned. A cell with several lines keeps them as line breaks, and a `|` inside a cell is escaped. If what you paste does not look like a table (a single row or a single column, rows with different numbers of cells, text indented with tabs), it is pasted as it is. Once pasted, the table can be edited with the editor below.
 
+### Inserting an empty table
+
+While editing a note, right-click the text and choose **Insert 2×2 table**: a Markdown table with two columns (titles "Column 1" and "Column 2") and two empty rows is written at the cursor, on its own lines. Leave editing mode and use the table icon to fill it in with the [table editor](#editing-tables), or type directly in the text. The same menu has **Cut**, **Copy**, **Paste** and **Paste as text**; note that this menu replaces the system one, so spelling suggestions are not offered there.
+
 ### Editing tables
 
 Above every table in a note's preview there is a small **table icon** (left-aligned, a little faded until you point at it). Click it to open the table editor: a window with only that table, shown as a grid. The rest of the note does not appear, and the window has the title bar of the note's category, like the other note windows. The icon is not shown on locked notes, and not on very large tables (over 4000 cells): edit those in text mode.
@@ -194,6 +198,7 @@ Above every table in a note's preview there is a small **table icon** (left-alig
 | Beside each row | **+** | Inserts an empty row right below it. On the header row it adds the first row of data. |
 | Beside each row | **🎨** | The same window for the whole row. Not on the header row: its color is chosen at the top. |
 | Bottom right corner | handle | Drag it to make the window wider or taller; the grid takes the extra space, which is handy for wide tables. |
+| Bottom | **Delete table** | Removes the whole table from the note, after a confirmation. It is applied at once (no need to press Save table) and cannot be undone from the editor. |
 | Bottom | **Undo** | Takes back the last change (deletion, move, insertion, color or typed text), one step per press, up to 50 steps. Disabled when there is nothing to undo. |
 | Bottom | **Cancel** (or Esc) | Closes the window and discards every change. |
 | Bottom | **Save table** | Writes the changes into the note. |
@@ -323,7 +328,7 @@ Press **New** and choose:
 | Field | Meaning |
 |---|---|
 | **Name** | Optional. If left empty, the goal is named automatically, for example "Create new notes: 5 per day". |
-| **What do I have to do?** | Create new notes, edit different notes, write characters, delete notes, archive notes, assign labels, create an alarm, finish a Pomodoro, or days with activity (a day counts if you did any of these). |
+| **What do I have to do?** | A cascading menu with four groups. **Notes**: create new notes, edit different notes, write characters, delete notes, archive notes, add notes to favorites, duplicate notes, change the category of notes, move notes, resize notes, close notes. **Labels**: assign labels, add labels, delete labels, organize labels. **Alarms**: create an alarm, have alarms ring, delete alarms, turn off an alarm, turn an alarm back on. **Activity**: finish a Pomodoro, days with activity (a day counts if you did any of these), empty the trash, restore notes from the archive, do searches, tidy up the notes, check the board activity, use a widget. The button shows the group and the choice, for example *Alarms › Turn off an alarm*. |
 | **How many…?** | The number to reach, from 1 to 9,999,999. The question changes with the action: "How many characters?" for writing, "How many notes?", "How many labels?" and so on. |
 | **In which period?** | Per day, per week (Monday to Sunday), per month or per year. |
 | **Only for the category** | Optional, for creating and editing notes: count only the notes of one category. |
@@ -339,8 +344,18 @@ You can create as many goals as you like, edit them with the pencil and delete t
 - **Delete notes** counts the notes you send to the trash.
 - **Assign labels** counts each time you turn a label on for a note.
 - **Create an alarm** counts the notes that get an alarm for the first time (changing an alarm that already exists does not count).
+- **Turn off an alarm** counts each time you turn an alarm off with the **Turn alarm off** button, and **Turn an alarm back on** each time you press **Turn alarm on** on an alarm that was off.
+- **Move notes**, **Resize notes** and **Close notes** count each time you drag a note on the board, resize it with its handles, or close it with the **X** button of its title bar (the note is minimized, not deleted). They only count when something really changed: a click that does not move or resize the note does not count. With several notes selected, every note moved or closed counts.
 - **Archive notes** and **Finish a Pomodoro** count each time you do it.
-- Progress is worked out from what you did in the current period, even before you created the goal, as far as the board has a record of it: notes created and edited. The other actions (characters, deleted notes, labels, alarms, archived notes and Pomodoros) are counted from the moment this feature is in place.
+- **Add notes to favorites** counts each time you turn the star of a note on (turning it off does not count; it needs the favorites option to be on).
+- **Empty the trash** counts each time you press **Empty trash**, and **Restore notes from the archive** each note you restore with the restore button of the archive window.
+- **Do searches** counts a search when you stop typing for one second in the search field of the board or in the note explorer. The same text is not counted twice in a row: clear the field to search for it again. Letters typed in between do not count.
+- **Tidy up the notes** counts each press of the **Tidy up** button that arranges at least one note, and **Check the board activity** each time you open the activity chart window.
+- **Have alarms ring** counts each time an alarm actually fires (a repeating alarm counts every time it rings). **Delete alarms** counts each time you press **Remove alarm** in the alarm panel (turning an alarm off does not count).
+- **Add labels** and **Delete labels** count the labels you create or remove in the labels list. **Organize labels** counts each time you change their order by dragging; renaming a label or changing its color does not count.
+- **Duplicate notes** counts each note you duplicate (from the note's info panel). **Change the category of notes** counts each note whose category or group you really change, one by one or in bulk on a selection; choosing the same one again does not count.
+- **Use a widget** counts each press of a button of a [widget](#note-widgets) (start, pause, reset, calendar navigation...).
+- Progress is worked out from what you did in the current period, even before you created the goal, as far as the board has a record of it: notes created and edited. The other actions (characters, deleted notes, labels, label changes, alarms, alarms rung or deleted, archived notes, Pomodoros, notes moved, resized or closed, favorites, trash, archive, searches, tidy-ups, chart views, widget uses, duplicated notes and category changes) are counted from the moment this feature is in place.
 
 ### Medals and streaks
 
@@ -349,6 +364,8 @@ Reaching a goal in a period earns one medal for that goal and that period, and a
 ![Goal reached screenshot](Screenshot10.jpg)
 
 The **Medals** tab shows how many you have of each kind, your **streak** (the consecutive days, up to today, in which you completed at least one daily goal; if you skip a day, it starts again) and your best streak, and a few **milestones** that unlock along the way (first goal, 10 and 100 goals, streaks of 3, 7 and 30 days). Medals stay even if you delete or change the goal.
+
+The **Medals** tab tiles are clickable: pressing **Bronze**, **Silver**, **Gold** or **Trophy** shows which goals earned that kind of medal, how many times each, and the day, week, month or year of each one (most recent first); hover a line to see the exact date and time. If a goal was deleted, its last name is kept next to the medals it earned (medals earned before this feature show as *Deleted goal*). The milestones are clickable too: a reached one shows when it unlocked and what produced it (the medals in order for the totals, the days in a row and the goals completed each day for the streaks); a locked one shows your progress and how much is missing.
 
 ### Managing goals
 
@@ -384,6 +401,8 @@ Set from the alarm clock icon on a note. The panel lets you configure:
 
 **How it behaves**: once the alarm window opens, the note gets a blinking colored border (customizable in settings) and a looping sound alarm starts, together with an **alarm dialog window** — it keeps ringing until you stop it, using the dialog's **Stop** button (closing the dialog with the X or Esc counts as Stop) or the note's alarm icon. With a single daily time, stopping it means it will ring again after the configured interval if you don't fully resolve it. With **multiple times in the same day**, stopping it resolves every time slot due so far at once, and it then stays silent until the *next* scheduled time arrives — it never resumes nagging in between. Border and sound are always checked on the same 5-second cadence, so they never fall out of sync with each other.
 
+**Turn an alarm off**: in the note's alarm panel, the **Turn alarm off** button (between **Save** and **Remove alarm**) switches the alarm off without deleting it. A turned-off alarm keeps its date, times, repeat, "Skip Saturday and Sunday" setting and its Repetitions and Last alarm counters, but it does not ring, does not make the note's border blink, does not send notifications and does not move forward on its own, not even after Obsidian was closed for days. A banner at the top of the panel says so, and the button becomes **Turn alarm on**; the click is saved at once and the panel stays open. On the note, the alarm icon turns into a crossed-out alarm clock, and in the [alarm list](#alarms-and-reminders) the row is greyed out with **Off** in the new **Status** column. When you turn an alarm back on and its date has already passed, it does not ring for what you missed: if it repeats, it jumps to its next date (counting from the date it had; moved on if it falls on a weekend with "Skip Saturday and Sunday" on), and a message shows the new date; if it does not repeat, it moves to today and rings as an overdue alarm would. Editing the alarm and pressing **Save** keeps it off; **Remove alarm** deletes it for good, off or not. Turning an alarm off can also be a [goal](#goals) ("Turn off an alarm").
+
 **Quick snooze**: while an alarm is ringing, the alarm dialog shows the note's name, a **duration dropdown** (1, 2, 3, 4, 5, 10, 15, 20, 25, 30, 45 minutes or 1 hour), a **Snooze** button and a **Stop** button; the dropdown remembers the last duration you used. If the alarm has a repeat set, a third button, **Postpone to next schedule**, is also shown — the same action as the button of that name in the note's own alarm panel, without having to open it: it moves the alarm straight to its next due date and time (moved on to Monday if that date falls on a weekend and "Skip Saturday and Sunday" is on), doesn't touch the Repetitions counter, and doesn't schedule anything to happen again in a few minutes like the duration dropdown does. The dialog is a regular window, so while it's open it takes the focus — if it fires while you're typing, close it or pick an option before carrying on. Clicking the note's alarm icon while it rings opens the same choices as a menu, plus "Stop" and "Open alarm panel". Sound, blinking border and dialog pause together and come back when the time is up — the scheduled date doesn't change (except with "Postpone to next schedule", which is precisely about changing it). For notes with several times in the same day, the time isn't marked as done, so it rings again after the snooze. If a snooze would go past midnight and the alarm's window ends today, the alarm moves to the next available day (respecting "Skip Saturday and Sunday") and a message tells you. Choosing "Snooze" is saved with the note, so it survives a restart of Obsidian; the alarm list shows "Snoozed until HH:MM" instead of the countdown, and editing, postponing or removing the alarm cancels any pending snooze.
 
 **Repetitions counter**: every time an alarm actually fires (notification and sound start), the note's counter goes up by one — including re-rings after the configured interval, and each individual time of a multi-time day. Alarms missed while Obsidian was closed are not counted, since they never rang. The counter is kept when you postpone to the next alarm or edit the alarm, and is reset only when you remove the alarm from the note.
@@ -392,7 +411,7 @@ Set from the alarm clock icon on a note. The panel lets you configure:
 
 **Skipped times notice**: if Obsidian was not running when a time of today's alarm came due (for example you open Obsidian at 10:00 and the 07:30 time has already passed), that time still does not ring late — but the next time you open the board, the "Missed reminders" window lists it, so a skipped time never goes unnoticed. A time that already rang before a restart is not reported, and neither is an alarm you set today for a time that has already passed.
 
-**Alarm list**: the toolbar's "Alarms" button shows every note with an alarm set, grouped by category/group/subgroup, with its due date, time(s), a live "time remaining" countdown (days/hours/minutes, or "Overdue"), and a **Repetitions** column showing how many times that alarm has actually rung so far and a **Last alarm** column with the date and time it last rang. Clicking a row opens that note's alarm panel directly.
+**Alarm list**: the toolbar's "Alarms" button shows every note with an alarm set, grouped by category/group/subgroup, with its due date, time(s), a live "time remaining" countdown (days/hours/minutes, or "Overdue"), and a **Repetitions** column showing how many times that alarm has actually rung so far, a **Last alarm** column with the date and time it last rang, and a **Status** column (**On** or **Off**, see **Turn an alarm off** above). Alarms that are turned off are greyed out, show "—" instead of the countdown, and a line above the table says how many there are. Clicking a row opens that note's alarm panel directly. The window can be **moved** by dragging its title and **resized** with the handle in its bottom-right corner (the board remembers the size, not the position: it opens centered every time); the table scrolls inside it when there are many alarms.
 
 ---
 
@@ -695,6 +714,14 @@ If [data compression](#data-file-compression) is enabled, the file instead start
 
 ## Version history
 
+### 1.1.6
+
+- New: in the **Medals** tab you can press **Bronze**, **Silver**, **Gold** or **Trophy** to see which goals earned that kind of medal, how many times each and in which day, week, month or year. The name of a goal is kept even after you delete it. The **milestones** below are clickable as well: they show when each one unlocked and what led to it, or your progress if it is still locked.
+- New: **Turn alarm off** button in the alarm panel, between Save and Remove alarm. It switches the alarm off without deleting it: the date, times, repeat and counters stay saved, but it stops ringing, blinking and sending notifications, and it does not move forward on its own. The button becomes **Turn alarm on**. The alarm list has a new **Status** column (On/Off) with turned-off alarms greyed out and counted above the table, and the alarm icon on the note shows a crossed-out clock. Turning an alarm back on when its date has passed jumps a repeating alarm to its next date without ringing, and moves a non-repeating one to today. New Goals action: **Turn off an alarm**.
+- New: the **alarm list** window can now be moved (drag its title) and resized (handle in the bottom-right corner; the size is remembered), and the table scrolls inside it. The date column no longer breaks over two lines.
+- New: the **What do I have to do?** field of a goal is now a cascading menu with groups (Notes, Labels, Alarms, Activity). New actions: **Turn an alarm back on**, **Move notes**, **Resize notes** and **Close notes** (the X of the note), **Add notes to favorites**, **Empty the trash**, **Restore notes from the archive**, **Do searches**, **Tidy up the notes** and **Check the board activity**. The Goals window, the table editor, the activity chart and the board structure window can now also be moved by dragging their title, like the alarm list.
+- Fix: code-quality warnings from the plugin review: the fireworks animation now uses `window.requestAnimationFrame` (correct behavior in popout windows) and the confirmation button in the Goals window uses the current destructive-button style.
+
 ### 1.1.5
 
 - New: **Goals**, a small reward system. The new **Goals** button in the toolbar opens a window where you create your own goals: what to do (create new notes, edit different notes, write characters, delete notes, archive notes, assign labels, create an alarm, finish a Pomodoro, days with activity), how many times, and per day, week, month or year, optionally only for one category. The window can be resized, and it remembers its size. The **Manage** button deletes goals or resets medals, always asking for confirmation. The board counts by itself, shows a progress bar for each goal and, when you reach one, shows a large celebration window with fireworks (closed with **Congratulations**), a celebration sound, and gives you a **medal** (bronze for daily goals, silver for weekly, gold for monthly, trophy for yearly). The **Medals** tab shows your medals, your **streak** of consecutive days and a few **milestones**. The button shows today's completed daily goals (for example 2/4). It is light: nothing runs in the background, and in the settings (**Goals**) you can turn it all off, hide the counter or the celebration window; two sounds can be chosen in **Sound effects**. See the **Goals** section of the README.
@@ -862,6 +889,7 @@ Automatically rebuilds on every change to the source files (`main.ts`, `view.ts`
 | `goalsCelebration.ts` | The celebration window shown when a goal is reached. |
 | `fireworks.ts` | The fireworks animation of that window (no dependency on Obsidian). |
 | `goalsSound.ts`, `goalsSoundData.ts` | The celebration sound included in the plugin (embedded in the code, because only `main.js`, `manifest.json` and `styles.css` are installed). |
+| `windowTools.ts` | Dragging and resizing of the plugin's windows (no dependency on Obsidian). |
 | `snooze.ts` | The quick-snooze durations and the deadline calculation (no dependency on Obsidian). |
 | `gradient.ts` | The category background-gradient directions, color validation and CSS generation (no dependency on Obsidian). |
 | `i18n.ts` | Translation dictionaries (IT/EN) and the translation function. |

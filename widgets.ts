@@ -79,12 +79,15 @@ function setCssVar(el: HTMLElement, name: string, value: string) {
 
 /** Pulsante del widget. Il clic non deve aprire la modifica della nota, nemmeno con
  * l'opzione "richiedi doppio click". */
+let widgetUsedListener: (() => void) | null = null;
+
 function makeButton(label: string, cls: string, onClick: () => void): HTMLButtonElement {
 	const btn = h("button", cls, label);
 	btn.type = "button";
 	btn.addEventListener("click", (evt) => {
 		evt.stopPropagation();
 		onClick();
+		widgetUsedListener?.();
 	});
 	btn.addEventListener("dblclick", (evt) => evt.stopPropagation());
 	return btn;
@@ -495,6 +498,8 @@ export interface WidgetHost {
 	persist(): void;
 	/** Una fase del pomodoro è finita (suono e avviso li gestisce il plugin). */
 	notifyPomodoro(info: { label: string; ended: PomodoroPhase; next: PomodoroPhase; endedAt: number; late: boolean }): void;
+	/** L'utente ha premuto un pulsante di un widget (conta per gli obiettivi). */
+	used?(): void;
 }
 
 interface WidgetContext {
@@ -838,7 +843,9 @@ export class WidgetManager {
 	readonly store = new WidgetStateStore();
 	private entries = new Set<{ inst: WidgetInstance; createdAt: number; lastRun: number }>();
 
-	constructor(private host: WidgetHost) {}
+	constructor(private host: WidgetHost) {
+		widgetUsedListener = () => this.host.used?.();
+	}
 
 	/** Disegna il widget descritto da `source` dentro `container`. */
 	render(source: string, container: HTMLElement) {

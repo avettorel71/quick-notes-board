@@ -284,6 +284,23 @@ export function tabularTextToMarkdown(text: string): string | null {
 	return serializeTable(table).join("\n");
 }
 
+/** Tabella Markdown vuota, da cui partire: intestazione con i titoli dati e `dataRows` righe vuote. */
+export function emptyTableMarkdown(headers: string[], dataRows: number): string {
+	const cols = headers.length;
+	const table: QnbTable = {
+		startLine: 0,
+		endLine: 0,
+		commentLine: -1,
+		header: [...headers],
+		rows: Array.from({ length: dataRows }, () => new Array<string>(cols).fill("")),
+		align: new Array<TableAlign>(cols).fill(""),
+		headerColor: "",
+		colColors: new Array<string>(cols).fill(""),
+		rowColors: new Array<string>(dataRows).fill(""),
+	};
+	return serializeTable(table).join("\n");
+}
+
 /** Sostituisce nel testo la tabella numero `index` (come la restituisce findTables sullo
  * stesso testo) con la versione modificata. Il resto del testo non cambia. */
 export function replaceTableInContent(content: string, index: number, edited: QnbTable): string | null {
@@ -293,6 +310,18 @@ export function replaceTableInContent(content: string, index: number, edited: Qn
 	const lines = content.split("\n");
 	const from = original.commentLine >= 0 ? original.commentLine : original.startLine;
 	lines.splice(from, original.endLine - from, ...serializeTable(edited));
+	return lines.join("\n");
+}
+
+/** Toglie dal testo la tabella numero `index` (con il suo commento di colori, se c'è). Se resterebbero
+ * due righe vuote di fila dove era la tabella, ne tiene una sola. Null se la tabella non esiste. */
+export function removeTableFromContent(content: string, index: number): string | null {
+	const original = findTables(content)[index];
+	if (!original) return null;
+	const lines = content.split("\n");
+	const from = original.commentLine >= 0 ? original.commentLine : original.startLine;
+	lines.splice(from, original.endLine - from);
+	if (from > 0 && from < lines.length && lines[from - 1].trim() === "" && lines[from].trim() === "") lines.splice(from, 1);
 	return lines.join("\n");
 }
 

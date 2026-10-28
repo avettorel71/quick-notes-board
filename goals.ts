@@ -16,10 +16,29 @@ export type GoalAction =
 	| "archive"
 	| "label"
 	| "alarm"
+	| "alarmOff"
+	| "alarmOn"
 	| "pomodoro"
-	| "activeDay";
+	| "activeDay"
+	| "moveNote"
+	| "resizeNote"
+	| "closeNote"
+	| "favorite"
+	| "emptyTrash"
+	| "restoreNote"
+	| "search"
+	| "tidyUp"
+	| "viewActivity"
+	| "widget"
+	| "alarmRing"
+	| "alarmRemove"
+	| "labelAdd"
+	| "labelRemove"
+	| "labelOrganize"
+	| "duplicate"
+	| "changeCategory";
 /** Le azioni che la board non registra altrove e che quindi hanno un contatore giornaliero. */
-export type CounterKind = "archive" | "pomodoro" | "delete" | "alarm" | "chars" | "label";
+export type CounterKind = "archive" | "pomodoro" | "delete" | "alarm" | "alarmOff" | "alarmOn" | "moveNote" | "resizeNote" | "closeNote" | "favorite" | "emptyTrash" | "restoreNote" | "search" | "tidyUp" | "viewActivity" | "widget" | "alarmRing" | "alarmRemove" | "labelAdd" | "labelRemove" | "labelOrganize" | "duplicate" | "changeCategory" | "chars" | "label";
 export type GoalPeriod = "day" | "week" | "month" | "year";
 
 export const GOAL_ACTIONS: readonly GoalAction[] = [
@@ -30,8 +49,36 @@ export const GOAL_ACTIONS: readonly GoalAction[] = [
 	"archive",
 	"label",
 	"alarm",
+	"alarmOff",
+	"alarmOn",
 	"pomodoro",
 	"activeDay",
+	"moveNote",
+	"resizeNote",
+	"closeNote",
+	"favorite",
+	"emptyTrash",
+	"restoreNote",
+	"search",
+	"tidyUp",
+	"viewActivity",
+	"widget",
+	"alarmRing",
+	"alarmRemove",
+	"labelAdd",
+	"labelRemove",
+	"labelOrganize",
+	"duplicate",
+	"changeCategory",
+];
+
+/** Come le azioni si raggruppano nel menu "Cosa devo fare?": un sottomenu per gruppo. Ogni
+ * azione di GOAL_ACTIONS compare in un solo gruppo. */
+export const GOAL_ACTION_GROUPS: readonly { id: string; icon: string; actions: readonly GoalAction[] }[] = [
+	{ id: "notes", icon: "file-text", actions: ["create", "modify", "chars", "delete", "archive", "favorite", "duplicate", "changeCategory", "moveNote", "resizeNote", "closeNote"] },
+	{ id: "labels", icon: "tag", actions: ["label", "labelAdd", "labelRemove", "labelOrganize"] },
+	{ id: "alarms", icon: "alarm-clock", actions: ["alarm", "alarmRing", "alarmRemove", "alarmOff", "alarmOn"] },
+	{ id: "activity", icon: "activity", actions: ["pomodoro", "activeDay", "emptyTrash", "restoreNote", "search", "tidyUp", "viewActivity", "widget"] },
 ];
 export const GOAL_PERIODS: readonly GoalPeriod[] = ["day", "week", "month", "year"];
 
@@ -57,6 +104,25 @@ export interface DayCounters {
 	pomodoro?: number;
 	delete?: number;
 	alarm?: number;
+	alarmOff?: number;
+	alarmOn?: number;
+	moveNote?: number;
+	resizeNote?: number;
+	closeNote?: number;
+	favorite?: number;
+	emptyTrash?: number;
+	restoreNote?: number;
+	search?: number;
+	tidyUp?: number;
+	widget?: number;
+	alarmRing?: number;
+	alarmRemove?: number;
+	labelAdd?: number;
+	labelRemove?: number;
+	labelOrganize?: number;
+	duplicate?: number;
+	changeCategory?: number;
+	viewActivity?: number;
 	chars?: number;
 	labels?: Record<string, number>;
 }
@@ -66,6 +132,9 @@ export interface GoalsState {
 	/** Premi ottenuti: "idObiettivo|chiavePeriodo" → istante (ms). Restano anche se l'obiettivo
 	 * viene poi eliminato o cambiato. */
 	awards: Record<string, number>;
+	/** Ultimo nome noto degli obiettivi eliminati ("idObiettivo" → nome), per leggere lo storico
+	 * delle medaglie anche dopo l'eliminazione. */
+	names: Record<string, string>;
 	/** Azioni che la board non registra altrove: data "YYYY-MM-DD" → conteggi del giorno. */
 	counters: Record<string, DayCounters>;
 }
@@ -78,7 +147,7 @@ export interface GoalSources {
 }
 
 export function emptyGoalsState(): GoalsState {
-	return { goals: [], awards: {}, counters: {} };
+	return { goals: [], awards: {}, names: {}, counters: {} };
 }
 
 // ===== Date e periodi =====
@@ -192,6 +261,25 @@ export function goalProgress(goal: Goal, range: PeriodRange, src: GoalSources, s
 		case "pomodoro":
 		case "delete":
 		case "alarm":
+		case "alarmOff":
+		case "alarmOn":
+		case "moveNote":
+		case "resizeNote":
+		case "closeNote":
+		case "favorite":
+		case "emptyTrash":
+		case "restoreNote":
+		case "search":
+		case "tidyUp":
+		case "viewActivity":
+		case "widget":
+		case "alarmRing":
+		case "alarmRemove":
+		case "labelAdd":
+		case "labelRemove":
+		case "labelOrganize":
+		case "duplicate":
+		case "changeCategory":
 		case "chars": {
 			let n = 0;
 			for (const day of Object.keys(state.counters)) {
@@ -224,10 +312,10 @@ export interface GoalAwarded {
 
 /** Controlla gli obiettivi interessati da `action` (tutti se omessa) nel periodo in corso e
  * assegna il premio a quelli appena raggiunti. Restituisce i nuovi premi. */
-export function evaluateGoals(state: GoalsState, src: GoalSources, now: number, action?: GoalAction): GoalAwarded[] {
+export function evaluateGoals(state: GoalsState, src: GoalSources, now: number, actions?: ReadonlySet<GoalAction>): GoalAwarded[] {
 	const awarded: GoalAwarded[] = [];
 	for (const goal of state.goals) {
-		if (action && goal.action !== action && goal.action !== "activeDay") continue;
+		if (actions && !actions.has(goal.action) && goal.action !== "activeDay") continue;
 		const range = periodRange(goal.period, now);
 		const key = awardKey(goal.id, range.key);
 		if (key in state.awards) continue;
@@ -245,6 +333,23 @@ function hasActivity(c: DayCounters): boolean {
 		(c.pomodoro ?? 0) > 0 ||
 		(c.delete ?? 0) > 0 ||
 		(c.alarm ?? 0) > 0 ||
+		(c.alarmOff ?? 0) > 0 ||
+		(c.alarmOn ?? 0) > 0 ||
+		(c.moveNote ?? 0) > 0 ||
+		(c.resizeNote ?? 0) > 0 ||
+		(c.closeNote ?? 0) > 0 ||
+		(c.favorite ?? 0) > 0 ||
+		(c.emptyTrash ?? 0) > 0 ||
+		(c.restoreNote ?? 0) > 0 ||
+		(c.tidyUp ?? 0) > 0 ||
+		(c.widget ?? 0) > 0 ||
+		(c.alarmRing ?? 0) > 0 ||
+		(c.alarmRemove ?? 0) > 0 ||
+		(c.labelAdd ?? 0) > 0 ||
+		(c.labelRemove ?? 0) > 0 ||
+		(c.labelOrganize ?? 0) > 0 ||
+		(c.duplicate ?? 0) > 0 ||
+		(c.changeCategory ?? 0) > 0 ||
 		(c.chars ?? 0) > 0 ||
 		(c.labels !== undefined && Object.keys(c.labels).length > 0)
 	);
@@ -320,6 +425,33 @@ export function summarizeGoals(state: GoalsState, now: number): GoalsSummary {
 	return { counts, total, streak, bestStreak: best };
 }
 
+export interface AwardGroup {
+	goalId: string;
+	/** Chiavi dei periodi in cui la medaglia è stata ottenuta, dal più recente. */
+	periods: { key: string; ts: number }[];
+}
+
+/** Medaglie di un livello (giorno, settimana, mese, anno) raggruppate per obiettivo: prima
+ * l'obiettivo con più medaglie, a parità quello con la medaglia più recente. */
+export function groupAwards(state: GoalsState, period: GoalPeriod): AwardGroup[] {
+	const map = new Map<string, AwardGroup>();
+	for (const k of Object.keys(state.awards)) {
+		const ts = state.awards[k];
+		if (!ts) continue;
+		const cut = k.indexOf("|");
+		const pk = k.slice(cut + 1);
+		if (periodOfKey(pk) !== period) continue;
+		const id = k.slice(0, cut);
+		const g = map.get(id) ?? { goalId: id, periods: [] };
+		g.periods.push({ key: pk, ts });
+		map.set(id, g);
+	}
+	const groups = [...map.values()];
+	for (const g of groups) g.periods.sort((a, b) => (a.key < b.key ? 1 : a.key > b.key ? -1 : b.ts - a.ts));
+	groups.sort((a, b) => b.periods.length - a.periods.length || (b.periods[0].key < a.periods[0].key ? 1 : -1));
+	return groups;
+}
+
 export interface Milestone {
 	id: string;
 	kind: "total" | "streak";
@@ -337,6 +469,80 @@ export const MILESTONES: readonly Milestone[] = [
 
 export function milestoneReached(m: Milestone, s: GoalsSummary): boolean {
 	return (m.kind === "total" ? s.total : s.bestStreak) >= m.need;
+}
+
+export interface MilestoneMedal {
+	goalId: string;
+	periodKey: string;
+	period: GoalPeriod;
+	ts: number;
+}
+
+export interface MilestoneDetail {
+	reached: boolean;
+	/** Valore attuale (medaglie totali o miglior serie) e valore da raggiungere. */
+	current: number;
+	need: number;
+	/** Totali: la medaglia che ha fatto scattare il traguardo. */
+	unlockMedal?: MilestoneMedal;
+	/** Serie: ultimo giorno della serie al momento dello sblocco. */
+	unlockDay?: string;
+	/** Totali: le medaglie che compongono il traguardo, dalla più recente. */
+	medals: MilestoneMedal[];
+	/** Serie: i giorni della serie, dal più recente, con gli obiettivi giornalieri completati. */
+	days: { day: string; goalIds: string[] }[];
+}
+
+/** Cosa ha portato a un traguardo: per i totali le medaglie in ordine di data, per le serie i giorni di fila. */
+export function milestoneDetail(state: GoalsState, m: Milestone): MilestoneDetail {
+	const all: MilestoneMedal[] = [];
+	const byDay = new Map<string, string[]>();
+	for (const k of Object.keys(state.awards)) {
+		const ts = state.awards[k];
+		if (!ts) continue;
+		const cut = k.indexOf("|");
+		const periodKey = k.slice(cut + 1);
+		const period = periodOfKey(periodKey);
+		if (!period) continue;
+		const goalId = k.slice(0, cut);
+		all.push({ goalId, periodKey, period, ts });
+		if (period === "day") (byDay.get(periodKey) ?? byDay.set(periodKey, []).get(periodKey)!).push(goalId);
+	}
+	const detail: MilestoneDetail = { reached: false, current: 0, need: m.need, medals: [], days: [] };
+	if (m.kind === "total") {
+		all.sort((a, b) => a.ts - b.ts);
+		detail.current = all.length;
+		detail.reached = all.length >= m.need;
+		if (detail.reached) {
+			detail.unlockMedal = all[m.need - 1];
+			detail.medals = all.slice(0, m.need).reverse();
+		}
+		return detail;
+	}
+	// Serie: prima sequenza di giorni consecutivi lunga almeno `need` (altrimenti la migliore).
+	const sorted = [...byDay.keys()].sort();
+	const runs: string[][] = [];
+	let cur: string[] = [];
+	for (const day of sorted) {
+		if (cur.length > 0 && prevDay(day) === cur[cur.length - 1]) cur.push(day);
+		else {
+			if (cur.length > 0) runs.push(cur);
+			cur = [day];
+		}
+	}
+	if (cur.length > 0) runs.push(cur);
+	const best = runs.reduce((n, r) => Math.max(n, r.length), 0);
+	detail.current = best;
+	detail.reached = best >= m.need;
+	if (detail.reached) {
+		const run = runs.find((r) => r.length >= m.need) as string[];
+		detail.unlockDay = run[m.need - 1];
+		detail.days = run
+			.slice()
+			.reverse()
+			.map((day) => ({ day, goalIds: byDay.get(day) ?? [] }));
+	}
+	return detail;
 }
 
 /** Obiettivi giornalieri di oggi: quanti sono già completati e quanti sono in tutto. */
@@ -358,6 +564,8 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 	return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
+const LEGACY_ACTIONS: Record<string, GoalAction> = { moveWindow: "moveNote", resizeWindow: "resizeNote", closeWindow: "closeNote" };
+
 /** Rende utilizzabili i dati letti da data.json: scarta ciò che non è valido, senza errori. */
 export function normalizeGoalsState(raw: unknown): GoalsState {
 	const state = emptyGoalsState();
@@ -366,14 +574,16 @@ export function normalizeGoalsState(raw: unknown): GoalsState {
 		const ids = new Set<string>();
 		for (const g of raw.goals) {
 			if (!isRecord(g) || typeof g.id !== "string" || !g.id || ids.has(g.id)) continue;
-			if (!GOAL_ACTIONS.includes(g.action as GoalAction) || !GOAL_PERIODS.includes(g.period as GoalPeriod)) continue;
+			// Nomi usati in una versione di prova per le stesse azioni: l'obiettivo si conserva.
+			const action = LEGACY_ACTIONS[String(g.action)] ?? g.action;
+			if (!GOAL_ACTIONS.includes(action as GoalAction) || !GOAL_PERIODS.includes(g.period as GoalPeriod)) continue;
 			const target = Math.round(Number(g.target));
 			if (!Number.isFinite(target) || target < 1) continue;
 			ids.add(g.id);
 			state.goals.push({
 				id: g.id,
 				name: typeof g.name === "string" ? g.name : "",
-				action: g.action as GoalAction,
+				action: action as GoalAction,
 				period: g.period as GoalPeriod,
 				target: Math.min(target, GOAL_MAX_TARGET),
 				category: typeof g.category === "string" ? g.category : "",
@@ -386,11 +596,16 @@ export function normalizeGoalsState(raw: unknown): GoalsState {
 			if (typeof v === "number" && Number.isFinite(v)) state.awards[k] = v;
 		}
 	}
+	if (isRecord(raw.names)) {
+		for (const [id, v] of Object.entries(raw.names)) {
+			if (typeof v === "string" && v) state.names[id] = v.slice(0, 200);
+		}
+	}
 	if (isRecord(raw.counters)) {
 		for (const [day, c] of Object.entries(raw.counters)) {
 			if (!isRecord(c)) continue;
 			const entry: DayCounters = {};
-			for (const kind of ["archive", "pomodoro", "delete", "alarm", "chars"] as const) {
+			for (const kind of ["archive", "pomodoro", "delete", "alarm", "alarmOff", "alarmOn", "moveNote", "resizeNote", "closeNote", "favorite", "emptyTrash", "restoreNote", "search", "tidyUp", "viewActivity", "widget", "alarmRing", "alarmRemove", "labelAdd", "labelRemove", "labelOrganize", "duplicate", "changeCategory", "chars"] as const) {
 				const v = c[kind];
 				if (typeof v === "number" && v > 0) entry[kind] = v;
 			}

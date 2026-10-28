@@ -63,12 +63,12 @@ export class Fireworks {
 			return;
 		}
 		this.last = performance.now();
-		this.raf = requestAnimationFrame((t) => this.frame(t));
+		this.raf = window.requestAnimationFrame((t) => this.frame(t));
 	}
 
 	stop() {
 		this.running = false;
-		cancelAnimationFrame(this.raf);
+		window.cancelAnimationFrame(this.raf);
 		this.particles = [];
 		this.rockets = [];
 	}
@@ -90,7 +90,7 @@ export class Fireworks {
 			this.ctx?.clearRect(0, 0, this.width, this.height);
 			return;
 		}
-		this.raf = requestAnimationFrame((t) => this.frame(t));
+		this.raf = window.requestAnimationFrame((t) => this.frame(t));
 	}
 
 	private launch() {

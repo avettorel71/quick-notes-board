@@ -1,21 +1,25 @@
 import { App, Menu, Modal, Setting, setIcon } from "obsidian";
 import type QuickNotesBoardPlugin from "./main";
+import { addModalResizeGrip, enableModalDrag } from "./windowTools";
 import { t } from "./i18n";
+import { localeFor } from "./widgets";
 import type { QnbLang } from "./i18n";
 import {
-	GOAL_ACTIONS,
+	GOAL_ACTION_GROUPS,
 	GOAL_MAX_TARGET,
 	GOAL_PERIODS,
 	MILESTONES,
 	awardKey,
+	groupAwards,
 	goalProgress,
+	milestoneDetail,
 	milestoneReached,
 	newGoalId,
 	periodRange,
 	summarizeGoals,
 	todayStatus,
 } from "./goals";
-import type { Goal, GoalAction, GoalPeriod } from "./goals";
+import type { Goal, GoalAction, GoalPeriod, Milestone } from "./goals";
 
 /** Misura minima della finestra Obiettivi quando la si ridimensiona. */
 const GOALS_MIN_W = 420;
@@ -37,6 +41,10 @@ export class GoalsModal extends Modal {
 	private plugin: QuickNotesBoardPlugin;
 	private lang: QnbLang;
 	private tab: GoalsTab = "day";
+	/** Livello di medaglia aperto nella scheda Medaglie (null = riepilogo). */
+	private medalTier: GoalPeriod | null = null;
+	/** Traguardo aperto nella scheda Medaglie (null = riepilogo). */
+	private milestone: Milestone | null = null;
 	private bodyEl!: HTMLElement;
 	private tabButtons = new Map<GoalsTab, HTMLElement>();
 	/** Obiettivo in attesa di una seconda pressione su "Elimina" (evita cancellazioni per errore). */
@@ -82,6 +90,8 @@ export class GoalsModal extends Modal {
 			const btn = tabs.createEl("button", { cls: "qnb-goals-tab", text: this.tr(`goals.tab.${tab}`) });
 			btn.addEventListener("click", () => {
 				this.tab = tab;
+				this.medalTier = null;
+				this.milestone = null;
 				this.render();
 			});
 			this.tabButtons.set(tab, btn);
@@ -94,42 +104,14 @@ export class GoalsModal extends Modal {
 		const closeBtn = footer.createEl("button", { text: this.tr("trash.close") });
 		closeBtn.addEventListener("click", () => this.close());
 		this.render();
-		this.addResizeGrip();
-	}
-
-	/** Maniglia in basso a destra: allarga e allunga la finestra (che è centrata, quindi il
-	 * cambio di misura è doppio rispetto al mouse) e ricorda la misura per la volta dopo. */
-	private addResizeGrip() {
-		const grip = this.modalEl.createDiv({ cls: "qnb-table-edit-grip" });
-		grip.addEventListener("mousedown", (evt) => {
-			evt.preventDefault();
-			evt.stopPropagation();
-			const startX = evt.clientX;
-			const startY = evt.clientY;
-			const startW = this.modalEl.offsetWidth;
-			const startH = this.modalEl.offsetHeight;
-			const maxW = Math.floor(window.innerWidth * 0.98);
-			const maxH = Math.floor(window.innerHeight * 0.96);
-			this.modalEl.addClass("is-resized");
-
-			const onMove = (moveEvt: MouseEvent) => {
-				// Tasto rilasciato fuori dalla finestra senza mouseup: chiude il gesto.
-				if (moveEvt.buttons === 0) {
-					onUp();
-					return;
-				}
-				const w = Math.min(Math.max(GOALS_MIN_W, startW + (moveEvt.clientX - startX) * 2), maxW);
-				const h = Math.min(Math.max(GOALS_MIN_H, startH + (moveEvt.clientY - startY) * 2), maxH);
-				this.modalEl.setCssStyles({ width: `${w}px`, height: `${h}px` });
-			};
-			const onUp = () => {
-				window.removeEventListener("mousemove", onMove);
-				window.removeEventListener("mouseup", onUp);
-				void this.plugin.setGoalsWindowSize(this.modalEl.offsetWidth, this.modalEl.offsetHeight);
-			};
-			window.addEventListener("mousemove", onMove);
-			window.addEventListener("mouseup", onUp);
+		// Si ridimensiona dall'angolo in basso a destra (la misura è ricordata) e si sposta
+		// trascinando il titolo.
+		addModalResizeGrip(this.modalEl, {
+			minW: GOALS_MIN_W,
+			minH: GOALS_MIN_H,
+			onDone: (w, h) => void this.plugin.setGoalsWindowSize(w, h),
 		});
+		enableModalDrag(this.modalEl, ".qnb-goals-head");
 	}
 
 	onClose() {
@@ -304,12 +286,37 @@ export class GoalsModal extends Modal {
 	}
 
 	private renderMedals() {
+		if (this.medalTier) {
+			this.renderMedalDetail(this.medalTier);
+			return;
+		}
+		if (this.milestone) {
+			this.renderMilestoneDetail(this.milestone);
+			return;
+		}
 		const sum = summarizeGoals(this.plugin.goals, Date.now());
 
 		const tiles = this.bodyEl.createDiv({ cls: "qnb-goals-tiles" });
 		for (const period of GOAL_PERIODS) {
-			const tile = tiles.createDiv({ cls: "qnb-goals-tile" });
-			tierIcon(tile, period, sum.counts[period] > 0 ? "is-earned" : "");
+			const count = sum.counts[period];
+			const tile = tiles.createDiv({ cls: "qnb-goals-tile" + (count > 0 ? " is-clickable" : "") });
+			if (count > 0) {
+				tile.setAttribute("role", "button");
+				tile.setAttribute("tabindex", "0");
+				tile.setAttribute("aria-label", this.tr("goals.medals.open", { name: this.tr(`goals.medals.${period}`) }));
+				const open = () => {
+					this.medalTier = period;
+					this.render();
+				};
+				tile.addEventListener("click", open);
+				tile.addEventListener("keydown", (e) => {
+					if (e.key === "Enter" || e.key === " ") {
+						e.preventDefault();
+						open();
+					}
+				});
+			}
+			tierIcon(tile, period, count > 0 ? "is-earned" : "");
 			tile.createDiv({ cls: "qnb-goals-tile-count", text: String(sum.counts[period]) });
 			tile.createDiv({ cls: "qnb-goals-tile-label", text: this.tr(`goals.medals.${period}`) });
 		}
@@ -325,8 +332,154 @@ export class GoalsModal extends Modal {
 			const cell = grid.createDiv({ cls: "qnb-goals-milestone" + (reached ? " is-reached" : "") });
 			setIcon(cell.createSpan({ cls: "qnb-goals-milestone-icon" }), reached ? (m.kind === "streak" ? "flame" : "award") : "lock");
 			cell.createSpan({ text: this.tr(`goals.milestone.${m.id}`) });
+			cell.addClass("is-clickable");
+			cell.setAttribute("role", "button");
+			cell.setAttribute("tabindex", "0");
+			const open = () => {
+				this.milestone = m;
+				this.render();
+			};
+			cell.addEventListener("click", open);
+			cell.addEventListener("keydown", (e) => {
+				if (e.key === "Enter" || e.key === " ") {
+					e.preventDefault();
+					open();
+				}
+			});
 		}
 		this.bodyEl.createEl("p", { cls: "setting-item-description", text: this.tr("goals.medals.note") });
+	}
+
+	/** Medaglie di un livello, raggruppate per obiettivo, con i periodi in cui sono state ottenute. */
+	private renderMedalDetail(period: GoalPeriod) {
+		const state = this.plugin.goals;
+		const groups = groupAwards(state, period);
+		const total = groups.reduce((n, g) => n + g.periods.length, 0);
+
+		const head = this.bodyEl.createDiv({ cls: "qnb-goals-detail-head" });
+		const back = head.createEl("button", { cls: "qnb-goals-back" });
+		setIcon(back.createSpan({ cls: "qnb-btn-icon" }), "arrow-left");
+		back.createSpan({ text: this.tr("goals.medals.back") });
+		back.addEventListener("click", () => {
+			this.medalTier = null;
+			this.render();
+		});
+		const title = head.createDiv({ cls: "qnb-goals-detail-title" });
+		tierIcon(title, period, "is-earned");
+		title.createSpan({ text: `${this.tr(`goals.medals.${period}`)}: ${total}` });
+
+		if (groups.length === 0) {
+			this.bodyEl.createEl("p", { cls: "setting-item-description qnb-goals-empty", text: this.tr("goals.medals.none") });
+			return;
+		}
+		const list = this.bodyEl.createDiv({ cls: "qnb-goals-detail" });
+		for (const g of groups) {
+			const goal = state.goals.find((x) => x.id === g.goalId);
+			const name = this.goalNameOf(g.goalId);
+			const block = list.createDiv({ cls: "qnb-goals-detail-goal" });
+			const row = block.createDiv({ cls: "qnb-goals-detail-row" });
+			row.createSpan({ cls: "qnb-goals-detail-name", text: name || this.tr("goals.medals.deleted") });
+			if (name && !goal) row.createSpan({ cls: "qnb-goals-detail-deleted", text: this.tr("goals.medals.deletedTag") });
+			row.createSpan({ cls: "qnb-goals-detail-times", text: `× ${g.periods.length}` });
+			const periods = block.createDiv({ cls: "qnb-goals-detail-periods" });
+			for (const p of g.periods) {
+				periods.createDiv({
+					cls: "qnb-goals-detail-period",
+					text: this.periodLabel(p.key, period),
+					attr: { title: new Date(p.ts).toLocaleString(localeFor(this.lang)) },
+				});
+			}
+		}
+	}
+
+	/** Nome di un obiettivo, anche se eliminato (ultimo nome salvato); "" se non si sa più. */
+	private goalNameOf(goalId: string): string {
+		const state = this.plugin.goals;
+		const goal = state.goals.find((x) => x.id === goalId);
+		return goal ? this.plugin.goalDisplayName(goal) : (state.names[goalId] ?? "");
+	}
+
+	private goalLabelOf(goalId: string): string {
+		const name = this.goalNameOf(goalId);
+		if (!name) return this.tr("goals.medals.deleted");
+		return this.plugin.goals.goals.some((x) => x.id === goalId) ? name : `${name} ${this.tr("goals.medals.deletedTag")}`;
+	}
+
+	/** Dettaglio di un traguardo: quando è scattato e cosa l'ha prodotto; se è bloccato, il progresso. */
+	private renderMilestoneDetail(m: Milestone) {
+		const d = milestoneDetail(this.plugin.goals, m);
+		const loc = localeFor(this.lang);
+
+		const head = this.bodyEl.createDiv({ cls: "qnb-goals-detail-head" });
+		const back = head.createEl("button", { cls: "qnb-goals-back" });
+		setIcon(back.createSpan({ cls: "qnb-btn-icon" }), "arrow-left");
+		back.createSpan({ text: this.tr("goals.medals.back") });
+		back.addEventListener("click", () => {
+			this.milestone = null;
+			this.render();
+		});
+		const title = head.createDiv({ cls: "qnb-goals-detail-title" });
+		setIcon(title.createSpan({ cls: "qnb-goals-milestone-icon" }), d.reached ? (m.kind === "streak" ? "flame" : "award") : "lock");
+		title.createSpan({ text: this.tr(`goals.milestone.${m.id}`) });
+
+		const box = this.bodyEl.createDiv({ cls: "qnb-goals-detail" });
+		if (!d.reached) {
+			box.createDiv({ cls: "qnb-goals-detail-sub", text: this.tr("goals.ms.locked") });
+			const bar = box.createDiv({ cls: "qnb-goal-bar qnb-goals-ms-bar" });
+			bar.createDiv({ cls: "qnb-goal-bar-fill" }).setCssStyles({ width: `${Math.min(100, Math.round((d.current / d.need) * 100))}%` });
+			box.createDiv({ text: `${d.current} / ${d.need}` });
+			box.createDiv({
+				cls: "qnb-goals-detail-sub",
+				text: this.tr(m.kind === "streak" ? "goals.ms.missingDays" : "goals.ms.missingMedals", { n: String(d.need - d.current) }),
+			});
+			return;
+		}
+
+		if (m.kind === "total" && d.unlockMedal) {
+			const u = d.unlockMedal;
+			box.createDiv({
+				cls: "qnb-goals-detail-sub",
+				text: this.tr("goals.ms.unlockedOn", { date: new Date(u.ts).toLocaleString(loc, { dateStyle: "medium", timeStyle: "short" }) }),
+			});
+			box.createDiv({
+				cls: "qnb-goals-detail-sub",
+				text: this.tr("goals.ms.withMedal", { n: String(d.need), goal: this.goalLabelOf(u.goalId), period: this.periodLabel(u.periodKey, u.period) }),
+			});
+			box.createEl("h4", { text: this.tr("goals.ms.medalsList", { n: String(d.medals.length) }) });
+			for (const med of d.medals) {
+				const row = box.createDiv({ cls: "qnb-goals-detail-row qnb-goals-ms-row", attr: { title: new Date(med.ts).toLocaleString(loc) } });
+				tierIcon(row, med.period, "is-earned");
+				row.createSpan({ cls: "qnb-goals-detail-name", text: this.goalLabelOf(med.goalId) });
+				row.createSpan({ cls: "qnb-goals-detail-times", text: this.periodLabel(med.periodKey, med.period) });
+			}
+			return;
+		}
+
+		box.createDiv({ cls: "qnb-goals-detail-sub", text: this.tr("goals.ms.unlockedDay", { date: this.periodLabel(d.unlockDay ?? "", "day") }) });
+		box.createEl("h4", { text: this.tr("goals.ms.daysList", { n: String(d.days.length) }) });
+		for (const day of d.days) {
+			const row = box.createDiv({ cls: "qnb-goals-detail-row qnb-goals-ms-row" });
+			row.createSpan({ cls: "qnb-goals-detail-name", text: this.periodLabel(day.day, "day") });
+			row.createSpan({ cls: "qnb-goals-detail-times", text: day.goalIds.map((id) => this.goalLabelOf(id)).join(", ") });
+		}
+	}
+
+	/** Periodo in forma leggibile: "lun 26 ott 2026", "Settimana 43 · 2026", "ottobre 2026", "2026". */
+	private periodLabel(key: string, period: GoalPeriod): string {
+		const loc = localeFor(this.lang);
+		if (period === "day") {
+			const [y, m, d] = key.split("-").map(Number);
+			return new Date(y, m - 1, d).toLocaleDateString(loc, { weekday: "short", day: "numeric", month: "short", year: "numeric" });
+		}
+		if (period === "week") {
+			const [y, w] = key.split("-W");
+			return this.tr("goals.medals.weekLabel", { n: String(Number(w)), year: y });
+		}
+		if (period === "month") {
+			const [y, m] = key.split("-").map(Number);
+			return new Date(y, m - 1, 1).toLocaleDateString(loc, { month: "long", year: "numeric" });
+		}
+		return key;
 	}
 }
 
@@ -342,6 +495,7 @@ export class GoalEditModal extends Modal {
 	private categoryRow!: Setting;
 	private labelRow!: Setting;
 	private targetRow!: Setting;
+	private actionBtnEl!: HTMLElement;
 
 	constructor(app: App, plugin: QuickNotesBoardPlugin, goal: Goal | null, onSave: (goal: Goal) => void) {
 		super(app);
@@ -376,15 +530,11 @@ export class GoalEditModal extends Modal {
 
 		new Setting(contentEl)
 			.setName(this.tr("goals.edit.action"))
-			.addDropdown((dd) => {
-				for (const a of GOAL_ACTIONS) dd.addOption(a, this.tr(`goals.action.${a}`));
-				dd.setValue(this.draft.action).onChange((v) => {
-					this.draft.action = v as GoalAction;
-					this.categoryRow.settingEl.toggleClass("is-hidden", !this.usesCategory());
-					this.labelRow.settingEl.toggleClass("is-hidden", this.draft.action !== "label");
-					this.targetRow.setName(this.tr(`goals.edit.target.${this.draft.action}`));
-					this.updatePreview();
-				});
+			.addButton((btn) => {
+				this.actionBtnEl = btn.buttonEl;
+				this.actionBtnEl.addClass("qnb-goal-action-btn");
+				this.renderActionButton();
+				btn.onClick((evt) => this.openActionMenu(evt));
 			});
 
 		this.targetRow = new Setting(contentEl)
@@ -466,6 +616,67 @@ export class GoalEditModal extends Modal {
 		this.contentEl.empty();
 	}
 
+	/** Nome dell'azione con il suo gruppo: "Allarmi › Disattivare una sveglia". */
+	private actionLabel(action: GoalAction): string {
+		const group = GOAL_ACTION_GROUPS.find((g) => g.actions.includes(action));
+		const name = this.tr(`goals.action.${action}`);
+		return group ? `${this.tr(`goals.group.${group.id}`)} › ${name}` : name;
+	}
+
+	private renderActionButton() {
+		this.actionBtnEl.empty();
+		this.actionBtnEl.createSpan({ cls: "qnb-goal-action-text", text: this.actionLabel(this.draft.action) });
+		setIcon(this.actionBtnEl.createSpan({ cls: "qnb-btn-icon" }), "chevron-down");
+	}
+
+	private setAction(action: GoalAction) {
+		this.draft.action = action;
+		this.renderActionButton();
+		this.categoryRow.settingEl.toggleClass("is-hidden", !this.usesCategory());
+		this.labelRow.settingEl.toggleClass("is-hidden", this.draft.action !== "label");
+		this.targetRow.setName(this.tr(`goals.edit.target.${this.draft.action}`));
+		this.updatePreview();
+	}
+
+	/** Menu a cascata: un sottomenu per gruppo (Note, Etichette, Allarmi, Attività). Se questa
+	 * versione di Obsidian non ha i sottomenu, le stesse voci compaiono in un unico menu,
+	 * divise per gruppo. */
+	private openActionMenu(evt: MouseEvent) {
+		const addLeaf = (menu: Menu, action: GoalAction, titlePrefix = "") => {
+			menu.addItem((item) =>
+				item
+					.setTitle(titlePrefix + this.tr(`goals.action.${action}`))
+					.setChecked(this.draft.action === action)
+					.onClick(() => this.setAction(action))
+			);
+		};
+
+		let nested = true;
+		const menu = new Menu();
+		for (const group of GOAL_ACTION_GROUPS) {
+			menu.addItem((item) => {
+				item.setTitle(this.tr(`goals.group.${group.id}`)).setIcon(group.icon);
+				const setSubmenu = (item as unknown as { setSubmenu?: () => Menu }).setSubmenu;
+				if (typeof setSubmenu !== "function") {
+					nested = false;
+					return;
+				}
+				const submenu = setSubmenu.call(item);
+				for (const action of group.actions) addLeaf(submenu, action);
+			});
+		}
+		if (nested) {
+			menu.showAtMouseEvent(evt);
+			return;
+		}
+		const flat = new Menu();
+		GOAL_ACTION_GROUPS.forEach((group, i) => {
+			if (i > 0) flat.addSeparator();
+			for (const action of group.actions) addLeaf(flat, action, `${this.tr(`goals.group.${group.id}`)} › `);
+		});
+		flat.showAtMouseEvent(evt);
+	}
+
 	private usesCategory(): boolean {
 		return this.draft.action === "create" || this.draft.action === "modify";
 	}
@@ -520,7 +731,7 @@ class GoalConfirmModal extends Modal {
 			.addButton((btn) =>
 				btn
 					.setButtonText(t(this.lang, "goals.confirm.yes"))
-					.setWarning()
+					.setDestructive()
 					.onClick(() => {
 						this.close();
 						this.onConfirm();

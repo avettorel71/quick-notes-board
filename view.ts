@@ -5,7 +5,7 @@ import { DEFAULT_FONT_SIZE, DEFAULT_FONT_FAMILY, DEFAULT_FONT_COLOR, DEFAULT_BG_
 import { NewNoteModal, LabelsManagerModal, ChangeCategoryModal, FontSizeModal, TrashModal, ArchiveModal, LockPasswordModal, NoteInfoModal, CategoryStatsModal, BoardInfoModal, BoardActivityModal, DueDateModal, AlarmListModal, NoteExplorerModal, BoardStructureModal, LabelAssignModal, TableEditModal } from "./modal";
 import { t } from "./i18n";
 import type { QnbCategory, QnbGroup, QnbNoteIconId } from "./settings";
-import { cellColor, findTables, isEditableSize, replaceTableInContent, tabularTextToMarkdown, tintColor } from "./tables";
+import { cellColor, emptyTableMarkdown, findTables, isEditableSize, removeTableFromContent, replaceTableInContent, tabularTextToMarkdown, tintColor } from "./tables";
 import { GoalsModal } from "./goalsModal";
 import { todayStatus } from "./goals";
 import { encryptText, decryptText, DecryptionError } from "./crypto";
@@ -64,6 +64,7 @@ export class QuickNotesBoardView extends ItemView {
 
 	/** Id delle note in ordine di utilizzo: le meno recenti prima, l'ultima toccata in fondo. */
 	private noteOrder: string[] = [];
+	private searchRenderTimer: number | null = null;
 	/** Contatore sempre crescente per portare in primo piano una nota senza toccare il DOM. */
 	private zCounter = 1000;
 
@@ -140,6 +141,8 @@ export class QuickNotesBoardView extends ItemView {
 
 	async onClose() {
 		this.plugin.playSound("toolbar-close");
+		if (this.searchRenderTimer !== null) window.clearTimeout(this.searchRenderTimer);
+		this.searchRenderTimer = null;
 		for (const ro of this.activeResizeObservers) ro.disconnect();
 		this.activeResizeObservers = [];
 		this.restoreSidebars();
@@ -325,11 +328,20 @@ export class QuickNotesBoardView extends ItemView {
 
 		searchInput.addEventListener("input", () => {
 			this.searchQuery = searchInput.value;
+			this.plugin.goalSearch(this.searchQuery);
 			searchClearBtn.setCssStyles({ display: this.searchQuery ? "flex" : "none" });
-			this.renderBoard();
+			// Ridisegnare tutte le note a ogni battuta rende la ricerca lenta: si attende una breve pausa.
+			if (this.searchRenderTimer !== null) window.clearTimeout(this.searchRenderTimer);
+			this.searchRenderTimer = window.setTimeout(() => {
+				this.searchRenderTimer = null;
+				this.renderBoard();
+			}, 150);
 		});
 		searchClearBtn.addEventListener("click", () => {
 			this.searchQuery = "";
+			this.plugin.goalSearch("");
+			if (this.searchRenderTimer !== null) window.clearTimeout(this.searchRenderTimer);
+			this.searchRenderTimer = null;
 			searchInput.value = "";
 			searchClearBtn.setCssStyles({ display: "none" });
 			this.renderBoard();
@@ -1014,6 +1026,7 @@ export class QuickNotesBoardView extends ItemView {
 			this.tr("view.tidyUp.done", { count: String(visibleNotes.length), mode: this.tr(mode.labelKey) })
 		);
 
+		this.plugin.goalEvent("tidyUp");
 		this.tidyModeIndex = (this.tidyModeIndex + 1) % modes.length;
 	}
 
@@ -1102,6 +1115,7 @@ export class QuickNotesBoardView extends ItemView {
 		this.plugin.notes.push(copy);
 		await this.plugin.saveNotes();
 		this.plugin.goalEvent("create");
+		this.plugin.goalEvent("duplicate");
 		this.refreshVisibilityButtons();
 		this.renderBoard();
 	}
@@ -1186,10 +1200,16 @@ export class QuickNotesBoardView extends ItemView {
 		}
 
 		// Le note nuove/non ancora viste entrano in fondo all'ordine (= in cima visivamente).
+		const known = new Set(this.noteOrder);
 		for (const n of notes) {
-			if (!this.noteOrder.includes(n.id)) this.noteOrder.push(n.id);
+			if (!known.has(n.id)) {
+				known.add(n.id);
+				this.noteOrder.push(n.id);
+			}
 		}
-		notes.sort((a, b) => this.noteOrder.indexOf(a.id) - this.noteOrder.indexOf(b.id));
+		const rank = new Map<string, number>();
+		this.noteOrder.forEach((id, i) => rank.set(id, i));
+		notes.sort((a, b) => (rank.get(a.id) ?? 0) - (rank.get(b.id) ?? 0));
 
 		notes.forEach((note, index) => this.renderNote(note, note.pinned ? 10000 + index : 10 + index));
 	}
@@ -1321,6 +1341,7 @@ export class QuickNotesBoardView extends ItemView {
 		const count = this.selectedNoteIds.size;
 		this.selectedNoteIds.clear();
 		await this.plugin.saveNotes();
+		this.plugin.goalEvent("closeNote", count);
 		this.refreshVisibilityButtons();
 		this.renderBoard();
 		new Notice(this.tr("view.selection.minimizedDone", { count: String(count) }));
@@ -1382,12 +1403,15 @@ export class QuickNotesBoardView extends ItemView {
 			this.plugin.settings.categories,
 			(newCategory, newGroupId) => {
 				void (async () => {
+					let changed = 0;
 					for (const note of this.plugin.notes) {
 						if (this.selectedNoteIds.has(note.id)) {
+							if (note.category !== newCategory || note.groupId !== newGroupId) changed++;
 							note.category = newCategory;
 							note.groupId = newGroupId;
 						}
 					}
+					if (changed > 0) this.plugin.goalEvent("changeCategory", changed);
 					const count = this.selectedNoteIds.size;
 					this.selectedNoteIds.clear();
 					await this.plugin.saveNotes();
@@ -1663,6 +1687,7 @@ export class QuickNotesBoardView extends ItemView {
 									if (newCategory === note.category && newGroupId === note.groupId) return;
 									note.category = newCategory;
 									note.groupId = newGroupId;
+									this.plugin.goalEvent("changeCategory");
 									await this.plugin.saveNotes();
 									this.refreshVisibilityButtons();
 									this.renderBoard();
@@ -1896,6 +1921,7 @@ export class QuickNotesBoardView extends ItemView {
 						note.favorite = !note.favorite;
 						this.plugin.playSound("note-favorite");
 						await this.plugin.saveNotes();
+						if (note.favorite) this.plugin.goalEvent("favorite");
 						this.refreshVisibilityButtons();
 						this.renderBoard();
 					})();
@@ -1904,7 +1930,7 @@ export class QuickNotesBoardView extends ItemView {
 
 			alarm: () => {
 				const alarmBtn = actions.createEl("button", { cls: "qnb-note-action-btn" });
-				this.updateAlarmIcon(alarmBtn, !!note.dueDate);
+				this.updateAlarmIcon(alarmBtn, !!note.dueDate, !!note.reminderDisabled);
 				alarmBtn.addEventListener("mousedown", (evt) => evt.stopPropagation());
 				alarmBtn.addEventListener("click", (evt) => {
 					evt.stopPropagation();
@@ -1999,6 +2025,7 @@ export class QuickNotesBoardView extends ItemView {
 				this.plugin.stopDueAlarm(note.id);
 				this.plugin.playSound("note-minimize");
 				await this.plugin.saveNotes();
+				this.plugin.goalEvent("closeNote");
 				this.refreshVisibilityButtons();
 				this.renderBoard();
 			})();
@@ -2230,6 +2257,8 @@ export class QuickNotesBoardView extends ItemView {
 			handle.removeClass("is-resizing");
 			noteEl.removeClass("is-dragging");
 			void this.plugin.saveNotes();
+			// Conta solo se la misura è davvero cambiata (un clic sulla maniglia non vale).
+			if (note.w !== origW || note.h !== origH) this.plugin.goalEvent("resizeNote");
 		};
 
 		window.addEventListener("mousemove", onMove);
@@ -2307,10 +2336,13 @@ export class QuickNotesBoardView extends ItemView {
 		btn.toggleClass("qnb-note-action-active", isFavorite);
 	}
 
-	private updateAlarmIcon(btn: HTMLElement, hasDueDate: boolean) {
+	private updateAlarmIcon(btn: HTMLElement, hasDueDate: boolean, disabled = false) {
 		btn.empty();
-		setIcon(btn, "alarm-clock");
-		btn.setAttribute("aria-label", this.tr(hasDueDate ? "view.note.editDueDate" : "view.note.setDueDate"));
+		setIcon(btn, disabled ? "alarm-clock-off" : "alarm-clock");
+		btn.setAttribute(
+			"aria-label",
+			this.tr(disabled ? "view.note.editDueDateOff" : hasDueDate ? "view.note.editDueDate" : "view.note.setDueDate")
+		);
 		btn.toggleClass("qnb-note-action-active", hasDueDate);
 	}
 
@@ -2403,6 +2435,16 @@ export class QuickNotesBoardView extends ItemView {
 					void (async () => {
 						const updated = replaceTableInContent(note.content, index, edited);
 						if (updated === null || updated === note.content) return;
+						note.content = updated;
+						note.modifiedAt = Date.now();
+						this.plugin.recordNoteModified(note.id);
+						await this.plugin.saveNotes();
+						this.renderNoteBodyPreview(bodyEl, note, noteEl, toggleBtn);
+					})();
+				}, () => {
+					void (async () => {
+						const updated = removeTableFromContent(note.content, index);
+						if (updated === null) return;
 						note.content = updated;
 						note.modifiedAt = Date.now();
 						this.plugin.recordNoteModified(note.id);
@@ -2955,20 +2997,81 @@ export class QuickNotesBoardView extends ItemView {
 		textarea.addEventListener("input", updateSuggestions);
 		textarea.addEventListener("click", updateSuggestions);
 
+		// Un blocco (tabella) va su righe sue: righe vuote prima e dopo, solo se servono.
+		const insertBlock = (block: string) => {
+			const before = textarea.value.slice(0, textarea.selectionStart);
+			const after = textarea.value.slice(textarea.selectionEnd);
+			const lead = before === "" || before.endsWith("\n\n") ? "" : before.endsWith("\n") ? "\n" : "\n\n";
+			const tail = after === "" || after.startsWith("\n\n") ? "" : after.startsWith("\n") ? "\n" : "\n\n";
+			textarea.setRangeText(lead + block + tail, textarea.selectionStart, textarea.selectionEnd, "end");
+			textarea.dispatchEvent(new Event("input"));
+		};
+
 		// Incollando celle copiate da Excel, il testo diventa una tabella Markdown, su righe sue.
 		textarea.addEventListener("paste", (evt) => {
 			const table = tabularTextToMarkdown(evt.clipboardData?.getData("text/plain") ?? "");
 			if (table === null) return;
 			evt.preventDefault();
-			const before = textarea.value.slice(0, textarea.selectionStart);
-			const after = textarea.value.slice(textarea.selectionEnd);
-			const lead = before === "" || before.endsWith("\n\n") ? "" : before.endsWith("\n") ? "\n" : "\n\n";
-			const tail = after === "" || after.startsWith("\n\n") ? "" : after.startsWith("\n") ? "\n" : "\n\n";
-			textarea.setRangeText(lead + table + tail, textarea.selectionStart, textarea.selectionEnd, "end");
+			insertBlock(table);
+		});
+
+		// Mentre il menu del tasto destro è aperto il focus può lasciare il testo: non è una uscita
+		// dalla modifica, quindi niente salvataggio né ridisegno.
+		let contextMenuOpen = false;
+		const insertText = (text: string) => {
+			textarea.setRangeText(text, textarea.selectionStart, textarea.selectionEnd, "end");
 			textarea.dispatchEvent(new Event("input"));
+		};
+		textarea.addEventListener("contextmenu", (evt) => {
+			evt.preventDefault();
+			evt.stopPropagation();
+			const hasSelection = textarea.selectionStart !== textarea.selectionEnd;
+			const selected = () => textarea.value.slice(textarea.selectionStart, textarea.selectionEnd);
+			const menu = new Menu();
+			menu.addItem((item) =>
+				item.setTitle(this.tr("view.edit.cut")).setIcon("scissors").setDisabled(!hasSelection).onClick(() => {
+					void navigator.clipboard.writeText(selected());
+					insertText("");
+				})
+			);
+			menu.addItem((item) =>
+				item.setTitle(this.tr("view.edit.copy")).setIcon("copy").setDisabled(!hasSelection).onClick(() => {
+					void navigator.clipboard.writeText(selected());
+				})
+			);
+			menu.addItem((item) =>
+				item.setTitle(this.tr("view.edit.paste")).setIcon("clipboard-paste").onClick(() => {
+					void navigator.clipboard.readText().then((text) => {
+						const table = tabularTextToMarkdown(text);
+						if (table !== null) insertBlock(table);
+						else insertText(text);
+					});
+				})
+			);
+			menu.addItem((item) =>
+				item.setTitle(this.tr("view.edit.pasteText")).setIcon("clipboard-type").onClick(() => {
+					void navigator.clipboard.readText().then((text) => insertText(text));
+				})
+			);
+			menu.addSeparator();
+			menu.addItem((item) =>
+				item.setTitle(this.tr("view.edit.insertTable")).setIcon("table").onClick(() => {
+					const headers = [1, 2].map((n) => this.tr("view.edit.tableColumn", { n: String(n) }));
+					insertBlock(emptyTableMarkdown(headers, 2));
+				})
+			);
+			contextMenuOpen = true;
+			menu.onHide(() => {
+				window.setTimeout(() => {
+					contextMenuOpen = false;
+					if (textarea.isConnected) textarea.focus();
+				}, 0);
+			});
+			menu.showAtMouseEvent(evt);
 		});
 
 		textarea.addEventListener("blur", () => {
+			if (contextMenuOpen) return;
 			hideSuggestions();
 			void save();
 		});
@@ -3145,6 +3248,12 @@ export class QuickNotesBoardView extends ItemView {
 
 			if (this.dragState) {
 				void this.plugin.saveNotes();
+				// Conta le note che si sono davvero spostate (con la selezione multipla, ognuna).
+				let moved = note.x !== this.dragState.origX || note.y !== this.dragState.origY ? 1 : 0;
+				for (const extra of this.dragState.groupExtras) {
+					if (extra.note.x !== extra.origX || extra.note.y !== extra.origY) moved++;
+				}
+				if (moved > 0) this.plugin.goalEvent("moveNote", moved);
 			}
 			this.dragState = null;
 		};

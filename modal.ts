@@ -1,5 +1,6 @@
 import { App, Component, MarkdownRenderer, Modal, Setting, ButtonComponent, ColorComponent, ToggleComponent, setIcon, Notice } from "obsidian";
 import { WIDGET_TYPES, widgetTemplate, widgetTypeName } from "./widgets";
+import { addModalResizeGrip, enableModalDrag } from "./windowTools";
 import type { WidgetType } from "./widgets";
 import { CHANGELOG } from "./changelog";
 import { CATEGORY_ICON_OPTIONS } from "./settings";
@@ -537,6 +538,7 @@ export class TrashModal extends Modal {
 					this.plugin.notes = this.plugin.notes.filter((n) => !n.deleted);
 					this.plugin.playSound("trash-empty");
 					await this.persistAndRefresh();
+					this.plugin.goalEvent("emptyTrash");
 				})
 		);
 		footer.addButton((btn) => btn.setButtonText(this.tr("trash.close")).onClick(() => this.close()));
@@ -606,6 +608,7 @@ export class ArchiveModal extends Modal {
 						note.archived = false;
 						this.plugin.playSound("archive-restore");
 						await this.persistAndRefresh();
+						this.plugin.goalEvent("restoreNote");
 					})
 			);
 
@@ -1039,12 +1042,47 @@ const UNDO_LIMIT = 50;
 /** Finestra a griglia per modificare una tabella Markdown di una nota: celle, righe e colonne
  * (aggiungi, sposta, elimina) e colori (prima riga, singole righe e colonne). Lavora su una copia:
  * la tabella della nota cambia solo con "Salva tabella". */
+/** Conferma prima di eliminare una tabella dalla nota. */
+class ConfirmDeleteTableModal extends Modal {
+	constructor(
+		app: App,
+		private lang: QnbLang,
+		private onConfirm: () => void
+	) {
+		super(app);
+	}
+
+	onOpen() {
+		const { contentEl } = this;
+		contentEl.empty();
+		new Setting(contentEl).setName(t(this.lang, "modal.tableEdit.deleteTitle")).setHeading();
+		contentEl.createEl("p", { text: t(this.lang, "modal.tableEdit.deleteMessage") });
+		new Setting(contentEl)
+			.addButton((btn) => btn.setButtonText(t(this.lang, "modal.tableEdit.cancel")).onClick(() => this.close()))
+			.addButton((btn) =>
+				btn
+					.setButtonText(t(this.lang, "modal.tableEdit.deleteYes"))
+					.setDestructive()
+					.onClick(() => {
+						this.close();
+						this.onConfirm();
+					})
+			);
+	}
+
+	onClose() {
+		this.contentEl.empty();
+	}
+}
+
 export class TableEditModal extends Modal {
 	private plugin: QuickNotesBoardPlugin;
 	private lang: QnbLang;
 	private categoryName: string | undefined;
 	private table: QnbTable;
 	private onSave: (table: QnbTable) => void;
+	/** Se c'è, la finestra offre "Elimina tabella" (con conferma): toglie la tabella dalla nota. */
+	private onDelete?: () => void;
 	private selRow = 0;
 	private selCol = 0;
 	private gridWrap!: HTMLElement;
@@ -1062,7 +1100,8 @@ export class TableEditModal extends Modal {
 		plugin: QuickNotesBoardPlugin,
 		categoryName: string | undefined,
 		table: QnbTable,
-		onSave: (table: QnbTable) => void
+		onSave: (table: QnbTable) => void,
+		onDelete?: () => void
 	) {
 		super(app);
 		this.plugin = plugin;
@@ -1070,6 +1109,7 @@ export class TableEditModal extends Modal {
 		this.categoryName = categoryName;
 		this.table = cloneTable(table);
 		this.onSave = onSave;
+		this.onDelete = onDelete;
 	}
 
 	private tr(key: string, vars?: Record<string, string>): string {
@@ -1081,7 +1121,7 @@ export class TableEditModal extends Modal {
 		contentEl.empty();
 		this.modalEl.addClass("qnb-table-edit-modal");
 		if (!mountNoteWindowBar(this, this.plugin, this.categoryName, this.tr("modal.tableEdit.title"))) {
-			new Setting(contentEl).setName(this.tr("modal.tableEdit.title")).setHeading();
+			new Setting(contentEl.createDiv({ cls: "qnb-window-drag" })).setName(this.tr("modal.tableEdit.title")).setHeading();
 		}
 		contentEl.createEl("p", { cls: "setting-item-description", text: this.tr("modal.tableEdit.desc") });
 
@@ -1096,6 +1136,18 @@ export class TableEditModal extends Modal {
 		this.infoEl = contentEl.createEl("p", { cls: "setting-item-description qnb-table-edit-info" });
 
 		new Setting(contentEl)
+			.addButton((btn) => {
+				if (!this.onDelete) {
+					btn.buttonEl.hide();
+					return;
+				}
+				btn.setButtonText(this.tr("modal.tableEdit.delete")).setIcon("trash-2").setDestructive().onClick(() => {
+					new ConfirmDeleteTableModal(this.app, this.lang, () => {
+						this.onDelete?.();
+						this.close();
+					}).open();
+				});
+			})
 			.addButton((btn) => {
 				this.undoBtn = btn;
 				btn.setButtonText(this.tr("modal.tableEdit.undo")).setIcon("undo-2").onClick(() => this.undo());
@@ -1113,7 +1165,9 @@ export class TableEditModal extends Modal {
 
 		this.updateUndoButton();
 		this.renderGrid();
-		this.addResizeGrip();
+		// Si ridimensiona dall'angolo in basso a destra e si sposta trascinando il titolo.
+		addModalResizeGrip(this.modalEl, { minW: 480, minH: 400 });
+		enableModalDrag(this.modalEl, ".qnb-window-drag, .qnb-category-title-bar");
 	}
 
 	/** Salva lo stato attuale prima di una modifica, per poterla annullare con "Ripristina". */
@@ -1138,40 +1192,6 @@ export class TableEditModal extends Modal {
 
 	private updateUndoButton() {
 		this.undoBtn.setDisabled(this.undoStack.length === 0);
-	}
-
-	/** Maniglia in basso a destra: allarga e allunga la finestra, e la griglia prende lo spazio
-	 * in più. La finestra è centrata, quindi per seguire il mouse il cambio di misura è doppio. */
-	private addResizeGrip() {
-		const grip = this.modalEl.createDiv({ cls: "qnb-table-edit-grip" });
-		grip.addEventListener("mousedown", (evt) => {
-			evt.preventDefault();
-			evt.stopPropagation();
-			const startX = evt.clientX;
-			const startY = evt.clientY;
-			const startW = this.modalEl.offsetWidth;
-			const startH = this.modalEl.offsetHeight;
-			const maxW = Math.floor(window.innerWidth * 0.98);
-			const maxH = Math.floor(window.innerHeight * 0.96);
-			this.modalEl.addClass("is-resized");
-
-			const onMove = (moveEvt: MouseEvent) => {
-				// Tasto rilasciato fuori dalla finestra senza mouseup: chiude il gesto.
-				if (moveEvt.buttons === 0) {
-					onUp();
-					return;
-				}
-				const w = Math.min(Math.max(480, startW + (moveEvt.clientX - startX) * 2), maxW);
-				const h = Math.min(Math.max(400, startH + (moveEvt.clientY - startY) * 2), maxH);
-				this.modalEl.setCssStyles({ width: `${w}px`, height: `${h}px` });
-			};
-			const onUp = () => {
-				window.removeEventListener("mousemove", onMove);
-				window.removeEventListener("mouseup", onUp);
-			};
-			window.addEventListener("mousemove", onMove);
-			window.addEventListener("mouseup", onUp);
-		});
 	}
 
 	private iconButton(parent: HTMLElement, icon: string, label: string, disabled: boolean, onClick: (evt: MouseEvent) => void) {
@@ -2366,6 +2386,7 @@ export class BoardActivityModal extends Modal {
 
 	onOpen() {
 		this.plugin.playSound("dialog-board-activity");
+		this.plugin.goalEvent("viewActivity");
 		this.modalEl.addClass("qnb-activity-modal-resizable");
 		this.modalEl.setCssStyles({ width: `${this.plugin.settings.activityChartWindowWidth}px` });
 		this.modalEl.setCssStyles({ height: `${this.plugin.settings.activityChartWindowHeight}px` });
@@ -2379,6 +2400,7 @@ export class BoardActivityModal extends Modal {
 
 		this.render();
 		this.addResizeHandle();
+		enableModalDrag(this.modalEl, ".qnb-window-drag");
 	}
 
 	/** Maniglia di ridimensionamento nell'angolo in basso a destra della finestra: la
@@ -2419,7 +2441,7 @@ export class BoardActivityModal extends Modal {
 		const { contentEl } = this;
 		contentEl.empty();
 		contentEl.addClass("qnb-activity-modal");
-		new Setting(contentEl).setName(this.tr("modal.boardActivity.title")).setHeading();
+		new Setting(contentEl.createDiv({ cls: "qnb-window-drag" })).setName(this.tr("modal.boardActivity.title")).setHeading();
 
 		// Navigazione mese (frecce), senza poter andare oltre il mese corrente.
 		const nav = contentEl.createDiv({ cls: "qnb-activity-nav" });
@@ -2849,6 +2871,12 @@ export class DueDateModal extends Modal {
 			new Setting(contentEl).setName(this.tr("modal.dueDate.title")).setHeading();
 		}
 
+		if (this.note.reminderDisabled) {
+			const banner = contentEl.createDiv({ cls: "qnb-alarm-off-banner" });
+			setIcon(banner.createSpan({ cls: "qnb-btn-icon" }), "bell-off");
+			banner.createSpan({ text: this.tr("modal.dueDate.disabledBanner") });
+		}
+
 		new Setting(contentEl).setName(this.tr("modal.dueDate.dueDateLabel")).addText((text) => {
 			text.inputEl.type = "date";
 			text.setValue(this.dueDate);
@@ -3025,7 +3053,19 @@ export class DueDateModal extends Modal {
 		);
 		if (this.note.dueDate) {
 			buttonsRow.addButton((btn) =>
+				btn
+					.setButtonText(this.tr(this.note.reminderDisabled ? "modal.dueDate.enable" : "modal.dueDate.disable"))
+					.onClick(async () => {
+						await this.plugin.setAlarmEnabled(this.note.id, !!this.note.reminderDisabled);
+						this.dueDate = this.note.dueDate || "";
+						this.remStartDate = this.note.reminderStartDate || this.dueDate;
+						this.onSaved();
+						this.render();
+					})
+			);
+			buttonsRow.addButton((btn) =>
 				btn.setButtonText(this.tr("view.note.removeDueDate")).onClick(async () => {
+					this.plugin.goalEvent("alarmRemove");
 					this.note.dueDate = undefined;
 					this.note.reminderStartDate = undefined;
 					this.note.reminderStartTime = undefined;
@@ -3037,6 +3077,7 @@ export class DueDateModal extends Modal {
 					this.note.reminderFireCount = undefined;
 					this.note.reminderLastFired = undefined;
 					this.note.reminderSnoozeUntil = undefined;
+					this.note.reminderDisabled = undefined;
 					this.plugin.stopDueAlarm(this.note.id);
 					await this.plugin.saveNotes();
 					this.onSaved();
@@ -3053,6 +3094,10 @@ export class DueDateModal extends Modal {
 
 /** Elenco di tutte le quick note con un allarme impostato, ordinate per data più vicina.
  * Cliccando una riga si chiude e si apre direttamente il pannello allarme di quella nota. */
+/** Misura minima della lista allarmi quando la si ridimensiona. */
+const ALARM_LIST_MIN_W = 560;
+const ALARM_LIST_MIN_H = 320;
+
 export class AlarmListModal extends Modal {
 	private plugin: QuickNotesBoardPlugin;
 	private lang: QnbLang;
@@ -3072,13 +3117,26 @@ export class AlarmListModal extends Modal {
 	onOpen() {
 		this.plugin.playSound("dialog-alarm-list");
 		this.modalEl.addClass("qnb-alarm-list-modal-wide");
+		const { alarmListWindowWidth: sw, alarmListWindowHeight: sh } = this.plugin.settings;
+		if (sw >= ALARM_LIST_MIN_W && sh >= ALARM_LIST_MIN_H) {
+			this.modalEl.addClass("is-resized");
+			this.modalEl.style.width = `${Math.min(sw, Math.floor(window.innerWidth * 0.98))}px`;
+			this.modalEl.style.height = `${Math.min(sh, Math.floor(window.innerHeight * 0.96))}px`;
+		}
+		// Si sposta trascinando il titolo e si ridimensiona dall'angolo in basso a destra.
+		enableModalDrag(this.modalEl, ".qnb-window-drag");
+		addModalResizeGrip(this.modalEl, {
+			minW: ALARM_LIST_MIN_W,
+			minH: ALARM_LIST_MIN_H,
+			onDone: (w, h) => void this.plugin.setAlarmListWindowSize(w, h),
+		});
 		this.render();
 	}
 
 	private render() {
 		const { contentEl } = this;
 		contentEl.empty();
-		new Setting(contentEl).setName(this.tr("modal.alarmList.title")).setHeading();
+		new Setting(contentEl.createDiv({ cls: "qnb-window-drag" })).setName(this.tr("modal.alarmList.title")).setHeading();
 
 		const notes = this.plugin.notes
 			.filter((n) => !n.deleted && !n.archived && n.dueDate)
@@ -3096,7 +3154,15 @@ export class AlarmListModal extends Modal {
 			return;
 		}
 
-		const grid = contentEl.createDiv({ cls: "qnb-alarm-grid" });
+		const disabledCount = notes.filter((n) => n.reminderDisabled).length;
+		if (disabledCount > 0) {
+			contentEl.createEl("p", {
+				cls: "setting-item-description",
+				text: this.tr("modal.alarmList.disabledCount", { n: String(disabledCount) }),
+			});
+		}
+		const scroll = contentEl.createDiv({ cls: "qnb-alarm-scroll" });
+		const grid = scroll.createDiv({ cls: "qnb-alarm-grid" });
 
 		const headerRow = grid.createDiv({ cls: "qnb-alarm-grid-row qnb-alarm-grid-header" });
 		headerRow.createDiv({ text: this.tr("modal.alarmList.colCategory") });
@@ -3104,12 +3170,13 @@ export class AlarmListModal extends Modal {
 		headerRow.createDiv({ text: this.tr("modal.alarmList.colTitle") });
 		headerRow.createDiv({ text: this.tr("modal.alarmList.colDate") });
 		headerRow.createDiv({ text: this.tr("modal.alarmList.colTime") });
+		headerRow.createDiv({ text: this.tr("modal.alarmList.colStatus") });
 		headerRow.createDiv({ text: this.tr("modal.alarmList.colRemaining") });
 		headerRow.createDiv({ text: this.tr("modal.alarmList.colRepetitions") });
 		headerRow.createDiv({ text: this.tr("modal.alarmList.colLastFired") });
 
 		for (const note of notes) {
-			const row = grid.createDiv({ cls: "qnb-alarm-grid-row qnb-alarm-grid-item" });
+			const row = grid.createDiv({ cls: "qnb-alarm-grid-row qnb-alarm-grid-item" + (note.reminderDisabled ? " is-disabled" : "") });
 			row.addEventListener("click", () => {
 				this.close();
 				this.onOpenAlarm(note);
@@ -3124,13 +3191,17 @@ export class AlarmListModal extends Modal {
 			const groupPath = note.groupId ? this.plugin.getGroupPath(note.category, note.groupId) : "";
 			row.createDiv({ text: groupPath || "—" });
 			row.createDiv({ text: note.title });
-			row.createDiv({ text: note.dueDate || "" });
+			row.createDiv({ cls: "qnb-alarm-cell-nowrap", text: note.dueDate || "" });
 
 			const displayTime =
 				note.reminderStartTimes && note.reminderStartTimes.length > 0
 					? note.reminderStartTimes.join(", ")
 					: note.reminderStartTime || "";
 			row.createDiv({ text: displayTime });
+			row.createDiv({
+				cls: "qnb-alarm-cell-status",
+				text: this.tr(note.reminderDisabled ? "modal.alarmList.statusOff" : "modal.alarmList.statusOn"),
+			});
 
 			// Per le note con più orari, il tempo rimasto va calcolato sul prossimo orario
 			// non ancora passato (l'array è già in ordine crescente al salvataggio) — non
@@ -3149,7 +3220,9 @@ export class AlarmListModal extends Modal {
 			const snoozedUntil =
 				note.reminderSnoozeUntil && note.reminderSnoozeUntil > Date.now() ? note.reminderSnoozeUntil : 0;
 			row.createDiv({
-				text: snoozedUntil
+				text: note.reminderDisabled
+					? "—"
+					: snoozedUntil
 					? this.tr("modal.alarmList.snoozedUntil", { time: formatClock(snoozedUntil) })
 					: formatTimeRemaining(note.dueDate || "", timeForCountdown, (key, vars) => this.tr(key, vars)),
 			});
@@ -3190,6 +3263,7 @@ export class NoteExplorerModal extends Modal {
 	private lang: QnbLang;
 	private onSelectNote: (note: QuickNote) => void;
 	private filterQuery = "";
+	private filterRenderTimer: number | null = null;
 	/** Nomi delle categorie attualmente aperte. Vuoto all'apertura della finestra: tutte
 	 * collassate finché non le apri (a mano, o automaticamente cercando qualcosa al loro
 	 * interno) — non c'è memoria tra un'apertura della finestra e la successiva. */
@@ -3227,7 +3301,12 @@ export class NoteExplorerModal extends Modal {
 
 		filterInput.addEventListener("input", () => {
 			this.filterQuery = filterInput.value;
-			this.renderTree(treeEl);
+			this.plugin.goalSearch(this.filterQuery);
+			if (this.filterRenderTimer !== null) window.clearTimeout(this.filterRenderTimer);
+			this.filterRenderTimer = window.setTimeout(() => {
+				this.filterRenderTimer = null;
+				this.renderTree(treeEl);
+			}, 120);
 		});
 
 		this.renderTree(treeEl);
@@ -3348,6 +3427,8 @@ export class NoteExplorerModal extends Modal {
 	}
 
 	onClose() {
+		if (this.filterRenderTimer !== null) window.clearTimeout(this.filterRenderTimer);
+		this.filterRenderTimer = null;
 		this.contentEl.empty();
 	}
 }
@@ -3528,6 +3609,7 @@ export class BoardStructureModal extends Modal {
 		this.modalEl.setCssStyles({ height: `${this.plugin.settings.boardStructureWindowHeight}px` });
 		this.render();
 		this.addResizeHandle();
+		enableModalDrag(this.modalEl, ".qnb-window-drag");
 	}
 
 	private addResizeHandle() {
@@ -3562,7 +3644,7 @@ export class BoardStructureModal extends Modal {
 		const { contentEl } = this;
 		contentEl.empty();
 		contentEl.addClass("qnb-structure-modal");
-		new Setting(contentEl).setName(this.tr("modal.boardStructure.title")).setHeading();
+		new Setting(contentEl.createDiv({ cls: "qnb-window-drag" })).setName(this.tr("modal.boardStructure.title")).setHeading();
 
 		const container = contentEl.createDiv({ cls: "qnb-structure-svg-container" });
 		const categories = this.plugin.settings.categories;
