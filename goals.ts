@@ -560,11 +560,15 @@ export function todayStatus(state: GoalsState, now: number): { done: number; tot
 
 // ===== Validazione dei dati letti da disco =====
 
+function isGoalAction(v: unknown): v is GoalAction {
+	return typeof v === "string" && (GOAL_ACTIONS as readonly string[]).includes(v);
+}
+
 function isRecord(v: unknown): v is Record<string, unknown> {
 	return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
-const LEGACY_ACTIONS: Record<string, GoalAction> = { moveWindow: "moveNote", resizeWindow: "resizeNote", closeWindow: "closeNote" };
+const LEGACY_ACTIONS: Partial<Record<string, GoalAction>> = { moveWindow: "moveNote", resizeWindow: "resizeNote", closeWindow: "closeNote" };
 
 /** Rende utilizzabili i dati letti da data.json: scarta ciò che non è valido, senza errori. */
 export function normalizeGoalsState(raw: unknown): GoalsState {
@@ -575,15 +579,15 @@ export function normalizeGoalsState(raw: unknown): GoalsState {
 		for (const g of raw.goals) {
 			if (!isRecord(g) || typeof g.id !== "string" || !g.id || ids.has(g.id)) continue;
 			// Nomi usati in una versione di prova per le stesse azioni: l'obiettivo si conserva.
-			const action = LEGACY_ACTIONS[String(g.action)] ?? g.action;
-			if (!GOAL_ACTIONS.includes(action as GoalAction) || !GOAL_PERIODS.includes(g.period as GoalPeriod)) continue;
+			const action: unknown = LEGACY_ACTIONS[String(g.action)] ?? g.action;
+			if (!isGoalAction(action) || !GOAL_PERIODS.includes(g.period as GoalPeriod)) continue;
 			const target = Math.round(Number(g.target));
 			if (!Number.isFinite(target) || target < 1) continue;
 			ids.add(g.id);
 			state.goals.push({
 				id: g.id,
 				name: typeof g.name === "string" ? g.name : "",
-				action: action as GoalAction,
+				action,
 				period: g.period as GoalPeriod,
 				target: Math.min(target, GOAL_MAX_TARGET),
 				category: typeof g.category === "string" ? g.category : "",

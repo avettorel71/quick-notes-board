@@ -2666,3 +2666,8 @@ button.qnb-group-menu-btn {
 @media (prefers-reduced-motion: reduce) {
 	.qnb-goal-celebrate-icon, .qnb-goal-celebrate-title, .qnb-goal-celebrate-list, .qnb-goal-celebrate-btn { animation-duration: 0.01s; animation-delay: 0s; }
 }
+
+/* Finestre spostabili: serve un riferimento per left/top se la finestra non lo ha già. */
+.qnb-window-movable {
+	position: relative;
+}

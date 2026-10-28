@@ -714,6 +714,10 @@ If [data compression](#data-file-compression) is enabled, the file instead start
 
 ## Version history
 
+### 1.1.7
+
+- Fix: code-quality corrections requested by the Obsidian plugin review (how windows are made movable and how saved goals are read). Nothing changes in how the plugin works.
+
 ### 1.1.6
 
 - New: in the **Medals** tab you can press **Bronze**, **Silver**, **Gold** or **Trophy** to see which goals earned that kind of medal, how many times each and in which day, week, month or year. The name of a goal is kept even after you delete it. The **milestones** below are clickable as well: they show when each one unlocked and what led to it, or your progress if it is still locked.

@@ -18,7 +18,7 @@ function clamp(v: number, min: number, max: number): number {
  * al momento del clic, quindi va bene anche se il titolo viene ridisegnato). Non parte dai
  * pulsanti e dai campi, e la finestra non esce mai dallo schermo. Chiamare una volta sola. */
 export function enableModalDrag(modalEl: HTMLElement, handleSelector: string) {
-	if (getComputedStyle(modalEl).position === "static") modalEl.style.position = "relative";
+	if (getComputedStyle(modalEl).position === "static") modalEl.classList.add("qnb-window-movable");
 	modalEl.addEventListener("mousedown", (evt: MouseEvent) => {
 		if (evt.button !== 0) return;
 		const target = evt.target as HTMLElement | null;
