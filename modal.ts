@@ -1075,6 +1075,10 @@ class ConfirmDeleteTableModal extends Modal {
 	}
 }
 
+/** Larghezza minima e massima (in caratteri) di una colonna nella griglia di modifica. */
+const TABLE_COL_MIN_CHARS = 6;
+const TABLE_COL_MAX_CHARS = 40;
+
 export class TableEditModal extends Modal {
 	private plugin: QuickNotesBoardPlugin;
 	private lang: QnbLang;
@@ -1087,8 +1091,6 @@ export class TableEditModal extends Modal {
 	private selCol = 0;
 	private gridWrap!: HTMLElement;
 	private infoEl!: HTMLElement;
-	/** Quadratino con il colore attuale della prima riga, accanto al pulsante per cambiarlo. */
-	private headerSwatch!: HTMLElement;
 	/** Stati precedenti della tabella (con la cella selezionata), dal più vecchio al più recente. */
 	private undoStack: { table: QnbTable; selRow: number; selCol: number }[] = [];
 	private undoBtn!: ButtonComponent;
@@ -1124,12 +1126,6 @@ export class TableEditModal extends Modal {
 			new Setting(contentEl.createDiv({ cls: "qnb-window-drag" })).setName(this.tr("modal.tableEdit.title")).setHeading();
 		}
 		contentEl.createEl("p", { cls: "setting-item-description", text: this.tr("modal.tableEdit.desc") });
-
-		const colorSetting = new Setting(contentEl).setName(this.tr("modal.tableEdit.headerColor"));
-		this.headerSwatch = colorSetting.controlEl.createSpan({ cls: "qnb-color-swatch qnb-color-swatch-static" });
-		colorSetting.addButton((btn) =>
-			btn.setButtonText(this.tr("modal.tableEdit.chooseColor")).onClick(() => this.openColorWindow("header", 0))
-		);
 
 		this.gridWrap = contentEl.createDiv({ cls: "qnb-table-edit-scroll" });
 
@@ -1222,8 +1218,8 @@ export class TableEditModal extends Modal {
 	}
 
 	/** Pulsante colore di una colonna o di una riga: apre la finestra per sceglierlo. */
-	private colorButton(parent: HTMLElement, kind: "col" | "row", slot: number) {
-		const label = this.tr(kind === "col" ? "modal.tableEdit.colColor" : "modal.tableEdit.rowColor");
+	private colorButton(parent: HTMLElement, kind: "header" | "col" | "row", slot: number) {
+		const label = this.tr(kind === "header" ? "modal.tableEdit.headerColor" : kind === "col" ? "modal.tableEdit.colColor" : "modal.tableEdit.rowColor");
 		const btn = this.iconButton(parent, "palette", label, false, () => this.openColorWindow(kind, slot));
 		btn.dataset.kind = kind;
 		btn.dataset.slot = String(slot);
@@ -1327,8 +1323,9 @@ export class TableEditModal extends Modal {
 				this.selRow = r + 1;
 				this.renderGrid({ r: this.selRow, c: this.selCol });
 			});
+			// Anche l'intestazione ha la sua tavolozza accanto alla riga (stessa del pulsante in alto).
 			if (r >= 1) this.colorButton(ctl, "row", r - 1);
-			else ctl.createSpan({ cls: "qnb-table-edit-ctl-spacer" });
+			else this.colorButton(ctl, "header", 0);
 			for (let c = 0; c < cols; c++) {
 				const td = tr.createEl("td");
 				const input = td.createEl("input", {
@@ -1345,6 +1342,7 @@ export class TableEditModal extends Modal {
 					}
 					if (r === 0) this.table.header[c] = input.value;
 					else this.table.rows[r - 1][c] = input.value;
+					this.fitColumn(c);
 				});
 				input.addEventListener("focus", () => {
 					this.typing = false;
@@ -1360,9 +1358,21 @@ export class TableEditModal extends Modal {
 			}
 		}
 
+		for (let c = 0; c < cols; c++) this.fitColumn(c);
 		this.applyColors();
 		this.updateSelection();
 		if (focus) this.focusCell(focus.r, focus.c);
+	}
+
+	/** Larghezza di una colonna della griglia: quanto il testo più lungo che contiene, tra un minimo
+	 * (per poter scrivere in una cella vuota) e un massimo (un testo lunghissimo non la fa dilagare). */
+	private fitColumn(c: number) {
+		let longest = this.table.header[c]?.length ?? 0;
+		for (const row of this.table.rows) longest = Math.max(longest, row[c]?.length ?? 0);
+		const chars = Math.min(TABLE_COL_MAX_CHARS, Math.max(TABLE_COL_MIN_CHARS, longest + 1));
+		this.gridWrap.querySelectorAll<HTMLInputElement>(`input[data-c="${c}"]`).forEach((input) => {
+			input.setCssStyles({ width: `calc(${chars}ch + 24px)` });
+		});
 	}
 
 	private focusCell(r: number, c: number) {
@@ -1397,9 +1407,9 @@ export class TableEditModal extends Modal {
 				color: color?.solid ? getContrastTextColor(color.hex) : "",
 			});
 		});
-		this.headerSwatch.setCssStyles({ backgroundColor: this.table.headerColor });
 		this.gridWrap.querySelectorAll<HTMLButtonElement>("button[data-kind]").forEach((btn) => {
-			btn.setCssStyles({ color: this.getColor(btn.dataset.kind === "row" ? "row" : "col", Number(btn.dataset.slot)) });
+			const kind = btn.dataset.kind === "row" ? "row" : btn.dataset.kind === "header" ? "header" : "col";
+			btn.setCssStyles({ color: this.getColor(kind, Number(btn.dataset.slot)) });
 		});
 	}
 

@@ -13,6 +13,10 @@ export interface ChangelogEntry {
 /** Dalla più recente alla più vecchia. */
 export const CHANGELOG: readonly ChangelogEntry[] = [
 	{
+		version: "1.1.8",
+		markdown: "- New: in the table editor the columns of the grid are now as wide as their content (with a minimum, so you can type into an empty cell, and a maximum, so a very long text does not take over the window), and they adapt as you type. The window takes less space; a wide table scrolls sideways as before.\n- Changed: in the table editor the color of the header row is now chosen with the **palette button beside the header row**, like the other rows; the **First row color** line at the top is gone.\n- New: the **Goals celebrations** now belong only to Quick Notes Board. They no longer open as an Obsidian window on top of whatever you are doing: they appear above everything else, with the background blurred and the focus on the celebration, and only while the board is the tab in front, with the celebration sound. Each goal reached has its own celebration (medal, name, fireworks and sound), always shown after the action that earned it is finished (for example the note is already in the trash), one at a time and closed with **Congratulations**; if several goals are reached, the next one starts right after. Goals reached while you are in another note or plugin are not announced there: the medal is saved at once and the celebration waits in a queue (kept even if you close Obsidian) until you are back on the board. If you leave the board during a celebration, it resumes when you return.",
+	},
+	{
 		version: "1.1.7",
 		markdown: "- Fix: code-quality corrections requested by the Obsidian plugin review (how windows are made movable and how saved goals are read). Nothing changes in how the plugin works.",
 	},

@@ -127,6 +127,15 @@ export interface DayCounters {
 	labels?: Record<string, number>;
 }
 
+/** Un obiettivo raggiunto che aspetta di essere festeggiato dentro la board. */
+export interface PendingCelebration {
+	name: string;
+	period: GoalPeriod;
+}
+
+/** Massimo di feste in coda: se non si apre mai la board, le più vecchie si perdono (le medaglie no). */
+export const MAX_PENDING_CELEBRATIONS = 100;
+
 export interface GoalsState {
 	goals: Goal[];
 	/** Premi ottenuti: "idObiettivo|chiavePeriodo" → istante (ms). Restano anche se l'obiettivo
@@ -137,6 +146,8 @@ export interface GoalsState {
 	names: Record<string, string>;
 	/** Azioni che la board non registra altrove: data "YYYY-MM-DD" → conteggi del giorno. */
 	counters: Record<string, DayCounters>;
+	/** Feste ancora da mostrare, nell'ordine in cui gli obiettivi sono stati raggiunti. */
+	pending: PendingCelebration[];
 }
 
 /** Quello che serve per calcolare il progresso, letto dalla board così com'è. */
@@ -147,7 +158,7 @@ export interface GoalSources {
 }
 
 export function emptyGoalsState(): GoalsState {
-	return { goals: [], awards: {}, names: {}, counters: {} };
+	return { goals: [], awards: {}, names: {}, counters: {}, pending: [] };
 }
 
 // ===== Date e periodi =====
@@ -359,6 +370,7 @@ function hasActivity(c: DayCounters): boolean {
  * come fatti, senza medaglia (valore 0), così non vengono premiati di nuovo subito dopo. */
 export function resetMedals(state: GoalsState, src: GoalSources, now: number) {
 	state.awards = {};
+	state.pending = [];
 	for (const goal of state.goals) {
 		const range = periodRange(goal.period, now);
 		if (goalProgress(goal, range, src, state) >= goal.target) state.awards[awardKey(goal.id, range.key)] = 0;
@@ -599,6 +611,13 @@ export function normalizeGoalsState(raw: unknown): GoalsState {
 		for (const [k, v] of Object.entries(raw.awards)) {
 			if (typeof v === "number" && Number.isFinite(v)) state.awards[k] = v;
 		}
+	}
+	if (Array.isArray(raw.pending)) {
+		for (const p of raw.pending) {
+			if (!isRecord(p) || typeof p.name !== "string" || !GOAL_PERIODS.includes(p.period as GoalPeriod)) continue;
+			state.pending.push({ name: p.name.slice(0, 200), period: p.period as GoalPeriod });
+		}
+		if (state.pending.length > MAX_PENDING_CELEBRATIONS) state.pending = state.pending.slice(-MAX_PENDING_CELEBRATIONS);
 	}
 	if (isRecord(raw.names)) {
 		for (const [id, v] of Object.entries(raw.names)) {

@@ -2398,7 +2398,7 @@ button.qnb-group-menu-btn {
 .qnb-table-edit-grid {
 	border-collapse: separate;
 	border-spacing: 3px;
-	width: 100%;
+	width: auto;
 }
 
 .qnb-table-edit-grid td {
@@ -2441,8 +2441,6 @@ button.qnb-group-menu-btn {
 }
 
 .qnb-table-edit-cell {
-	width: 100%;
-	min-width: 110px;
 	box-sizing: border-box;
 }
 
@@ -2650,21 +2648,20 @@ button.qnb-group-menu-btn {
 .qnb-goal-preview { font-style: italic; }
 .qnb-goal-error { color: var(--text-error); min-height: 1.2em; margin: 0; }
 
-/* Finestra di festeggiamento: solo opacità e trasformazioni, canvas fermo a fine animazione. */
-.qnb-goal-celebrate { position: relative; overflow: hidden; width: 620px; max-width: 96vw; min-height: 420px; display: flex; flex-direction: column; justify-content: center; text-align: center; background: radial-gradient(circle at 50% 30%, rgba(80, 60, 140, 0.35), transparent 70%), var(--background-primary); }
-.qnb-goal-celebrate .modal-content { position: relative; z-index: 1; display: flex; flex-direction: column; justify-content: center; }
+/* Festa di un obiettivo: sopra a tutto, con lo sfondo sfocato. Solo opacità e trasformazioni, canvas fermo a fine animazione. */
+.qnb-goal-celebrate-overlay { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.45); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
 .qnb-goal-celebrate-canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; }
-.qnb-goal-celebrate-body { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 12px 8px; }
+.qnb-goal-celebrate-card { position: relative; z-index: 1; width: 520px; max-width: 92%; text-align: center; border-radius: var(--radius-l, 12px); border: 1px solid var(--background-modifier-border); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5); background: radial-gradient(circle at 50% 30%, rgba(80, 60, 140, 0.35), transparent 70%), var(--background-primary); }
+.qnb-goal-celebrate-body { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 28px 20px; }
 .qnb-goal-celebrate-icon { display: inline-flex; color: var(--qnb-tier, #e0a800); filter: drop-shadow(0 0 14px var(--qnb-tier, #e0a800)); animation: qnb-goal-pop 0.8s 0.1s cubic-bezier(0.2, 1.4, 0.4, 1) both; }
 .qnb-goal-celebrate-icon svg { width: 96px; height: 96px; }
 .qnb-goal-celebrate-title { font-size: 2em; font-weight: 800; animation: qnb-goal-rise 0.6s 0.2s ease-out both; }
-.qnb-goal-celebrate-list { display: flex; flex-direction: column; gap: 6px; max-height: 30vh; overflow-y: auto; animation: qnb-goal-rise 0.6s 0.35s ease-out both; }
-.qnb-goal-celebrate-item { display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 1.1em; }
+.qnb-goal-celebrate-name { font-size: 1.25em; font-weight: 600; overflow-wrap: anywhere; animation: qnb-goal-rise 0.6s 0.35s ease-out both; }
 .qnb-goal-celebrate-btn { margin-top: 10px; padding: 10px 28px; font-size: 1.1em; height: auto; animation: qnb-goal-rise 0.6s 0.5s ease-out both; }
 @keyframes qnb-goal-pop { 0% { transform: scale(0.2) rotate(-25deg); opacity: 0; } 60% { transform: scale(1.25) rotate(8deg); opacity: 1; } 100% { transform: none; opacity: 1; } }
 @keyframes qnb-goal-rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) {
-	.qnb-goal-celebrate-icon, .qnb-goal-celebrate-title, .qnb-goal-celebrate-list, .qnb-goal-celebrate-btn { animation-duration: 0.01s; animation-delay: 0s; }
+	.qnb-goal-celebrate-icon, .qnb-goal-celebrate-title, .qnb-goal-celebrate-name, .qnb-goal-celebrate-btn { animation-duration: 0.01s; animation-delay: 0s; }
 }
 
 /* Finestre spostabili: serve un riferimento per left/top se la finestra non lo ha già. */

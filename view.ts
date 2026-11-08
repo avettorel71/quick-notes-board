@@ -97,6 +97,7 @@ export class QuickNotesBoardView extends ItemView {
 		this.focusBoard();
 		this.plugin.checkStaleRemindersNow();
 		this.plugin.flushMissedAlarmNotice();
+		this.plugin.showNextCelebration();
 	}
 
 	/** La board tiene il focus della tastiera. Senza un elemento attivo, Obsidian alla
@@ -141,6 +142,7 @@ export class QuickNotesBoardView extends ItemView {
 
 	async onClose() {
 		this.plugin.playSound("toolbar-close");
+		this.plugin.hideCelebration();
 		if (this.searchRenderTimer !== null) window.clearTimeout(this.searchRenderTimer);
 		this.searchRenderTimer = null;
 		for (const ro of this.activeResizeObservers) ro.disconnect();

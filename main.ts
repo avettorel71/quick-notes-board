@@ -4,10 +4,10 @@ import { currentChangelog, pendingChangelog } from "./changelog";
 import { WidgetManager, WIDGET_BLOCK_NAME } from "./widgets";
 import type { PomodoroPhase } from "./widgets";
 import { normalizeRecentColors, rememberColor } from "./tables";
-import { GoalCelebrationModal } from "./goalsCelebration";
+import { GoalCelebration } from "./goalsCelebration";
 import { playGoalSound } from "./goalsSound";
-import { bumpCounter, emptyGoalsState, evaluateGoals, normalizeGoalsState, resetMedals } from "./goals";
-import type { CounterKind, Goal, GoalAction, GoalAwarded, GoalPeriod, GoalSources, GoalsState } from "./goals";
+import { MAX_PENDING_CELEBRATIONS, bumpCounter, emptyGoalsState, evaluateGoals, normalizeGoalsState, resetMedals } from "./goals";
+import type { CounterKind, Goal, GoalAction, GoalAwarded, GoalPeriod, GoalSources, GoalsState, PendingCelebration } from "./goals";
 import { computeSnooze, formatClock, normalizeSnoozeMinutes } from "./snooze";
 import {
 	isHexColor,
@@ -334,7 +334,10 @@ export default class QuickNotesBoardPlugin extends Plugin {
 	private goalSearchLast = "";
 	private goalsDirty = false;
 	private goalSaveTimer: number | null = null;
-	private celebration: GoalCelebrationModal | null = null;
+	/** La festa a schermo (una sola, dentro la board) e quella per cui è già partito il suono. */
+	private celebration: GoalCelebration | null = null;
+	private celebrationSoundFor: PendingCelebration | null = null;
+	private celebrationNextTimer: number | null = null;
 	/** Ultimo avviso di scadenza inviato per nota (solo in memoria: non sopravvive alla
 	 * chiusura di Obsidian, come concordato). */
 	private dueReminderLastFired = new Map<string, number>();
@@ -425,6 +428,11 @@ export default class QuickNotesBoardPlugin extends Plugin {
 		// non compare nel mezzo dell'avvio.
 		this.app.workspace.onLayoutReady(() => void this.maybeShowWhatsNew());
 
+		// Le feste degli obiettivi vivono solo dentro la board: partono quando è la scheda davanti,
+		// si fermano se si passa ad altro e riprendono al ritorno.
+		this.registerEvent(this.app.workspace.on("active-leaf-change", () => this.showNextCelebration()));
+		this.app.workspace.onLayoutReady(() => this.showNextCelebration());
+
 		// Avvisi di scadenza: girano a livello di plugin (non della vista), così
 		// continuano a scattare anche a pannello board chiuso, finché Obsidian resta
 		// aperto. registerInterval lo ripulisce da solo alla disattivazione del plugin.
@@ -464,7 +472,9 @@ export default class QuickNotesBoardPlugin extends Plugin {
 		if (this.goalSaveTimer !== null) window.clearTimeout(this.goalSaveTimer);
 		this.goalSaveTimer = null;
 		if (this.goalsDirty) this.persistGoals();
-		this.celebration?.close();
+		if (this.celebrationNextTimer !== null) window.clearTimeout(this.celebrationNextTimer);
+		this.celebrationNextTimer = null;
+		this.hideCelebration();
 	}
 
 	async activateView() {
@@ -653,17 +663,77 @@ export default class QuickNotesBoardPlugin extends Plugin {
 		}
 	}
 
+	/** Un obiettivo raggiunto va in coda: si festeggia uno alla volta, solo dentro la board. */
 	private celebrateGoals(awarded: GoalAwarded[]) {
 		this.refreshGoalButtons();
-		if (this.settings.goalsCelebration) {
-			const items = awarded.map((a) => ({ name: this.goalDisplayName(a.goal), period: a.goal.period }));
-			if (this.celebration) this.celebration.addItems(items);
-			else {
-				this.celebration = new GoalCelebrationModal(this.app, this, items, () => (this.celebration = null));
-				this.celebration.open();
-			}
+		for (const a of awarded) this.goals.pending.push({ name: this.goalDisplayName(a.goal), period: a.goal.period });
+		if (this.goals.pending.length > MAX_PENDING_CELEBRATIONS) {
+			this.goals.pending = this.goals.pending.slice(-MAX_PENDING_CELEBRATIONS);
 		}
-		// Un suono scelto dall'utente ha la precedenza; altrimenti quello incluso nel plugin.
+		this.goalsDirty = true;
+		this.persistGoalsSoon();
+		// La festa viene sempre dopo l'operazione che l'ha causata: si aspetta che i salvataggi in
+		// corso delle note siano finiti e che la board sia stata ridisegnata (due fotogrammi).
+		void this.saveQueue.then(() =>
+			window.requestAnimationFrame(() => window.requestAnimationFrame(() => this.showNextCelebration()))
+		);
+	}
+
+	/** Mostra la prima festa in coda, se la board è la scheda attiva; altrimenti resta in coda. */
+	showNextCelebration() {
+		if (!this.goalsLoaded) return;
+		if (!this.settings.goalsEnabled) {
+			this.hideCelebration();
+			return;
+		}
+		const view = this.app.workspace.getActiveViewOfType(QuickNotesBoardView);
+		if (this.goals.pending.length === 0 || !view) {
+			this.hideCelebration();
+			return;
+		}
+		if (!this.settings.goalsCelebration) {
+			// Avviso spento: niente festa. Un solo suono, e solo qui dentro, poi la coda si svuota.
+			this.goals.pending = [];
+			this.goalsDirty = true;
+			this.persistGoalsSoon();
+			this.playGoalReachedSound();
+			return;
+		}
+		if (this.celebration && this.celebration.host === view.contentEl) return; // già a schermo
+		this.hideCelebration();
+		const item = this.goals.pending[0];
+		this.celebration = new GoalCelebration(view.contentEl, item, this.settings.language, () => this.finishCelebration(item));
+		this.celebration.show();
+		if (this.celebrationSoundFor !== item) {
+			this.celebrationSoundFor = item;
+			this.playGoalReachedSound();
+		}
+	}
+
+	/** Toglie la festa dallo schermo senza darla per vista (la prossima volta che la board è
+	 * davanti riparte dalla stessa). */
+	hideCelebration() {
+		this.celebration?.hide();
+		this.celebration = null;
+	}
+
+	private finishCelebration(item: PendingCelebration) {
+		this.celebration = null;
+		this.celebrationSoundFor = null;
+		const idx = this.goals.pending.indexOf(item);
+		if (idx >= 0) this.goals.pending.splice(idx, 1);
+		this.goalsDirty = true;
+		this.persistGoalsSoon();
+		// Una breve pausa, poi la successiva, con il suo suono.
+		if (this.celebrationNextTimer !== null) window.clearTimeout(this.celebrationNextTimer);
+		this.celebrationNextTimer = window.setTimeout(() => {
+			this.celebrationNextTimer = null;
+			this.showNextCelebration();
+		}, 500);
+	}
+
+	/** Un suono scelto dall'utente ha la precedenza; altrimenti quello incluso nel plugin. */
+	private playGoalReachedSound() {
 		if (this.getSoundResourcePath("goal-reached")) this.playSound("goal-reached");
 		else if (this.settings.goalsDefaultSound) playGoalSound();
 	}

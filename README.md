@@ -188,7 +188,7 @@ Above every table in a note's preview there is a small **table icon** (left-alig
 
 | Where | Button | What it does |
 |---|---|---|
-| Top | **First row color** · **Choose…** | Opens the color window for the header row. The color is solid, and the text color adjusts automatically for contrast. |
+| Beside the header row | **🎨** | Opens the color window for the header row, and takes the color chosen. The color is solid, and the text color adjusts automatically for contrast. |
 | Above each column | **◀** / **▶** | Moves that column left / right. Disabled on the first / last column. |
 | Above each column | **✕** | Deletes that column. Disabled when it is the only one left. |
 | Above each column | **+** | Inserts an empty column to the right of that column. |
@@ -196,7 +196,7 @@ Above every table in a note's preview there is a small **table icon** (left-alig
 | Beside each row | **↑** / **↓** | Moves that row up / down. Disabled on the first / last row of data. |
 | Beside each row | **✕** | Deletes that row. |
 | Beside each row | **+** | Inserts an empty row right below it. On the header row it adds the first row of data. |
-| Beside each row | **🎨** | The same window for the whole row. Not on the header row: its color is chosen at the top. |
+| Beside each row | **🎨** | The same window for the whole row. On the header row the palette opens the header color, as the button at the top. |
 | Bottom right corner | handle | Drag it to make the window wider or taller; the grid takes the extra space, which is handy for wide tables. |
 | Bottom | **Delete table** | Removes the whole table from the note, after a confirmation. It is applied at once (no need to press Save table) and cannot be undone from the editor. |
 | Bottom | **Undo** | Takes back the last change (deletion, move, insertion, color or typed text), one step per press, up to 50 steps. Disabled when there is nothing to undo. |
@@ -207,7 +207,7 @@ The header row has no arrows and no cross: it cannot be moved or deleted, only e
 
 **The color window**
 
-The 🎨 buttons (and **Choose…** for the first row) open a small window dedicated to the color:
+The 🎨 buttons (including the one of the header row) open a small window dedicated to the color:
 
 - **Preview**: the first cells of that row or column, colored as they will appear in the table.
 - **Colors**: the last ones you used (the most recent first), completed with a few suggested ones; click one to choose it.
@@ -359,7 +359,7 @@ You can create as many goals as you like, edit them with the pencil and delete t
 
 ### Medals and streaks
 
-Reaching a goal in a period earns one medal for that goal and that period, and a large window opens in the middle of the screen with fireworks and the goals you have just reached; you close it with the **Congratulations** button. The medal is **bronze** for daily goals, **silver** for weekly, **gold** for monthly and a **trophy** for yearly ones. Each goal can be earned again in every new period.
+Reaching a goal in a period earns one medal for that goal and that period, and the board celebrates it: a large card opens **above everything else, with the background blurred** and the keyboard focus on it, only while the Quick Notes Board is in front, with the medal, the name of the goal, fireworks and the celebration sound; you close it with the **Congratulations** button. Every goal has its own celebration, one at a time (always after the action that earned it is finished and shown on the board): if you reach several, they wait in a queue and the next one starts right after you close the previous one. The celebrations never appear outside the board: if you reach a goal while you are in another note or plugin (for example when an alarm rings), the medal is saved at once but the celebration waits, with no window and no sound, and starts as soon as the board is in front again. If you switch away in the middle of one, it resumes from where it was when you come back. The queue is kept even if you close Obsidian. The medal is **bronze** for daily goals, **silver** for weekly, **gold** for monthly and a **trophy** for yearly ones. Each goal can be earned again in every new period.
 
 ![Goal reached screenshot](Screenshot10.jpg)
 
@@ -380,7 +380,7 @@ The **Manage** button at the bottom left of the Goals window offers four options
 
 ### Settings
 
-In the settings, the **Goals** section lets you turn the whole feature off (the button disappears and nothing is counted or saved), hide the counter on the button, turn off the celebration window, and turn off the built-in sound. That sound is included in the plugin, so it needs no file; in **Sound effects** you can choose your own sound for reaching a goal instead (it takes priority), and one for opening the window.
+In the settings, the **Goals** section lets you turn the whole feature off (the button disappears and nothing is counted or saved), hide the counter on the button, turn off the celebration, and turn off the built-in sound. That sound is included in the plugin, so it needs no file; in **Sound effects** you can choose your own sound for reaching a goal instead (it takes priority), and one for opening the window.
 
 Goals, medals and the daily counters are saved in the plugin's `data.json`, not in your notes file, and they are light: nothing runs in the background; the progress is calculated only when you do something that can change it or when you open the window.
 
@@ -714,6 +714,12 @@ If [data compression](#data-file-compression) is enabled, the file instead start
 
 ## Version history
 
+### 1.1.8
+
+- New: in the table editor the columns of the grid are now as wide as their content (with a minimum, so you can type into an empty cell, and a maximum, so a very long text does not take over the window), and they adapt as you type. The window takes less space; a wide table scrolls sideways as before.
+- Changed: in the table editor the color of the header row is now chosen with the **palette button beside the header row**, like the other rows; the **First row color** line at the top is gone.
+- New: the **Goals celebrations** now belong only to Quick Notes Board. They no longer open as an Obsidian window on top of whatever you are doing: they appear above everything else, with the background blurred and the focus on the celebration, and only while the board is the tab in front, with the celebration sound. Each goal reached has its own celebration (medal, name, fireworks and sound), always shown after the action that earned it is finished (for example the note is already in the trash), one at a time and closed with **Congratulations**; if several goals are reached, the next one starts right after. Goals reached while you are in another note or plugin are not announced there: the medal is saved at once and the celebration waits in a queue (kept even if you close Obsidian) until you are back on the board. If you leave the board during a celebration, it resumes when you return.
+
 ### 1.1.7
 
 - Fix: code-quality corrections requested by the Obsidian plugin review (how windows are made movable and how saved goals are read). Nothing changes in how the plugin works.
@@ -890,8 +896,8 @@ Automatically rebuilds on every change to the source files (`main.ts`, `view.ts`
 | `tables.ts` | Markdown tables of the notes: finding them in the text, reading, rewriting and the row/column operations (no dependency on Obsidian). |
 | `goals.ts` | The goals: periods, progress, medals and streaks (no dependency on Obsidian). |
 | `goalsModal.ts` | The Goals window and the window to create or edit a goal. |
-| `goalsCelebration.ts` | The celebration window shown when a goal is reached. |
-| `fireworks.ts` | The fireworks animation of that window (no dependency on Obsidian). |
+| `goalsCelebration.ts` | The celebration shown inside the board when a goal is reached. |
+| `fireworks.ts` | The fireworks animation of that celebration (no dependency on Obsidian). |
 | `goalsSound.ts`, `goalsSoundData.ts` | The celebration sound included in the plugin (embedded in the code, because only `main.js`, `manifest.json` and `styles.css` are installed). |
 | `windowTools.ts` | Dragging and resizing of the plugin's windows (no dependency on Obsidian). |
 | `snooze.ts` | The quick-snooze durations and the deadline calculation (no dependency on Obsidian). |
