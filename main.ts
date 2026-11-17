@@ -3,6 +3,7 @@ import { MissedRemindersModal, AlarmRingModal, WhatsNewModal, addRepeatInterval,
 import { currentChangelog, pendingChangelog } from "./changelog";
 import { WidgetManager, WIDGET_BLOCK_NAME } from "./widgets";
 import type { PomodoroPhase } from "./widgets";
+import { replaceWidgetBlock } from "./workflow";
 import { normalizeRecentColors, rememberColor } from "./tables";
 import { GoalCelebration } from "./goalsCelebration";
 import { playGoalSound } from "./goalsSound";
@@ -371,6 +372,9 @@ export default class QuickNotesBoardPlugin extends Plugin {
 		persist: () => void this.saveSettings(),
 		notifyPomodoro: (info) => this.notifyPomodoro(info),
 		used: () => this.goalEvent("widget"),
+		recentColors: () => this.settings.tableRecentColors,
+		rememberColor: (hex) => void this.rememberTableColor(hex),
+		sourceChanged: (root, oldSource, newSource) => this.widgetSourceChanged(root, oldSource, newSource),
 	});
 	/** Finché lo stato dei widget non è stato letto da disco non va mai scritto. */
 	private widgetStateLoaded = false;
@@ -903,6 +907,20 @@ export default class QuickNotesBoardPlugin extends Plugin {
 		ids.push(noteId);
 		void this.saveActivityLog();
 		this.goalEvent("modify");
+	}
+
+	/** Un widget Workflow è cambiato: riscrive il suo blocco nel testo della nota che lo contiene. */
+	private widgetSourceChanged(root: HTMLElement, oldSource: string, newSource: string): boolean {
+		const noteId = root.closest<HTMLElement>("[data-qnb-note-id]")?.dataset.qnbNoteId;
+		const note = noteId ? this.notes.find((n) => n.id === noteId) : undefined;
+		if (!note || note.encrypted) return false;
+		const updated = replaceWidgetBlock(note.content, oldSource, newSource);
+		if (updated === null || updated === note.content) return false;
+		note.content = updated;
+		note.modifiedAt = Date.now();
+		this.recordNoteModified(note.id);
+		void this.saveNotes();
+		return true;
 	}
 
 	refreshOpenViews() {

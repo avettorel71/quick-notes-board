@@ -10,11 +10,12 @@
 
 import { t } from "./i18n";
 import type { QnbLang } from "./i18n";
+import { buildWorkflow, workflowTemplateLines } from "./workflow";
 
 export const WIDGET_BLOCK_NAME = "QNBWidget";
 
-export type WidgetType = "clock" | "calendar" | "countdown" | "stopwatch" | "pomodoro";
-export const WIDGET_TYPES: readonly WidgetType[] = ["clock", "calendar", "countdown", "stopwatch", "pomodoro"];
+export type WidgetType = "clock" | "calendar" | "countdown" | "stopwatch" | "pomodoro" | "workflow";
+export const WIDGET_TYPES: readonly WidgetType[] = ["clock", "calendar", "countdown", "stopwatch", "pomodoro", "workflow"];
 
 // ============================== Testi ==============================
 
@@ -483,6 +484,9 @@ export function widgetTemplate(type: WidgetType, lang: QnbLang, now: Date = new 
 		case "pomodoro":
 			lines = ["type: pomodoro", `id: ${newWidgetId("pomo")}`, "work: 25", "break: 5", "longbreak: 15", "cycles: 4"];
 			break;
+		case "workflow":
+			lines = workflowTemplateLines(lang, newWidgetId("wf"));
+			break;
 	}
 	return "```" + WIDGET_BLOCK_NAME + "\n" + lines.join("\n") + "\n```\n";
 }
@@ -500,6 +504,10 @@ export interface WidgetHost {
 	notifyPomodoro(info: { label: string; ended: PomodoroPhase; next: PomodoroPhase; endedAt: number; late: boolean }): void;
 	/** L'utente ha premuto un pulsante di un widget (conta per gli obiettivi). */
 	used?(): void;
+	/** Il testo del blocco di un widget è cambiato (Workflow): va riscritto nella nota. */
+	recentColors?(): string[];
+	rememberColor?(hex: string): void;
+	sourceChanged?(root: HTMLElement, oldSource: string, newSource: string): boolean;
 }
 
 interface WidgetContext {
@@ -831,6 +839,7 @@ const BUILDERS: Record<WidgetType, (ctx: WidgetContext) => WidgetBuild> = {
 	countdown: buildCountdown,
 	stopwatch: buildStopwatch,
 	pomodoro: buildPomodoro,
+	workflow: (ctx) => buildWorkflow({ root: ctx.root, lang: ctx.lang, source: ctx.source, host: ctx.host }),
 };
 
 // ============================== Gestione ==============================
@@ -852,7 +861,9 @@ export class WidgetManager {
 		const lang = this.host.lang();
 		const params = parseWidgetParams(source);
 		const root = container.appendChild(h("div", "qnb-widget"));
-		const type = (params.type || "").trim().toLowerCase();
+		// "timeline" era il nome provvisorio del Workflow: le note scritte con quello continuano a funzionare.
+		const rawType = (params.type || "").trim().toLowerCase();
+		const type = rawType === "timeline" ? "workflow" : rawType;
 
 		let error = "";
 		let built: WidgetBuild | null = null;

@@ -2478,6 +2478,7 @@ export class QuickNotesBoardView extends ItemView {
 			return;
 		}
 		const renderEl = bodyEl.createDiv({ cls: "qnb-note-rendered markdown-rendered" });
+		renderEl.dataset.qnbNoteId = note.id; // i widget (Workflow) ritrovano da qui la nota da aggiornare
 		void MarkdownRenderer.render(this.app, note.content, renderEl, "", this).then(() => {
 			this.decorateTables(renderEl, note, bodyEl, noteEl, toggleBtn);
 		});

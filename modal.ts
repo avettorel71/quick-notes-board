@@ -3601,6 +3601,8 @@ function drawStructureNode(svg: SVGSVGElement, node: QnbStructureNode) {
 export class BoardStructureModal extends Modal {
 	private plugin: QuickNotesBoardPlugin;
 	private lang: QnbLang;
+	/** Categoria scelta nel menu a tendina; resta quella scelta finché Obsidian è aperto. */
+	private static selectedCategory = "";
 
 	constructor(app: App, plugin: QuickNotesBoardPlugin) {
 		super(app);
@@ -3656,8 +3658,27 @@ export class BoardStructureModal extends Modal {
 		contentEl.addClass("qnb-structure-modal");
 		new Setting(contentEl.createDiv({ cls: "qnb-window-drag" })).setName(this.tr("modal.boardStructure.title")).setHeading();
 
+		const allCategories = this.plugin.settings.categories;
+		// Senza una scelta valida (prima apertura o categoria cancellata) si parte dalla prima categoria.
+		if (!allCategories.some((c) => c.name === BoardStructureModal.selectedCategory)) {
+			BoardStructureModal.selectedCategory = allCategories[0]?.name ?? "";
+		}
+		if (allCategories.length > 1) {
+			const row = contentEl.createDiv({ cls: "qnb-structure-select-row" });
+			row.createSpan({ text: this.tr("modal.boardStructure.category") });
+			const select = row.createEl("select", { cls: "dropdown" });
+			for (const cat of allCategories) {
+				select.createEl("option", { value: cat.name, text: cat.name });
+			}
+			select.value = BoardStructureModal.selectedCategory;
+			select.addEventListener("change", () => {
+				BoardStructureModal.selectedCategory = select.value;
+				this.render();
+			});
+		}
+
 		const container = contentEl.createDiv({ cls: "qnb-structure-svg-container" });
-		const categories = this.plugin.settings.categories;
+		const categories = allCategories.filter((c) => c.name === BoardStructureModal.selectedCategory);
 
 		if (categories.length === 0) {
 			container.createDiv({ cls: "setting-item-description", text: this.tr("modal.boardStructure.empty") });

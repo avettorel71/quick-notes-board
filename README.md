@@ -111,7 +111,7 @@ If you've defined any [labels](#labels), a second row appears below the category
 Each note is a small draggable card with:
 
 - A **colored header**, matching its category, with the category's icon (if any) and the note's title.
-- A **text body** in Markdown, previewed exactly like a real Obsidian note — or a live [widget](#note-widgets) (clock, calendar, countdown, stopwatch, pomodoro) in its place.
+- A **text body** in Markdown, previewed exactly like a real Obsidian note — or a live [widget](#note-widgets) (clock, calendar, countdown, stopwatch, pomodoro, workflow) in its place.
 - A row of action icons — fully reorderable and individually hideable, see [Customizing note action icons](#customizing-note-action-icons). The default order:
 
 | Icon | Action |
@@ -417,9 +417,9 @@ Set from the alarm clock icon on a note. The panel lets you configure:
 
 ## Note widgets
 
-A **widget** is a note that, instead of text, shows a small **live tool**: a clock, a calendar, a countdown, a stopwatch or a pomodoro timer. Widgets are meant as mini, self-contained utilities that help you keep an eye on things right from the board, working in the background while you do something else.
+A **widget** is a note that, instead of text, shows a small **live tool**: a clock, a calendar, a countdown, a stopwatch, a pomodoro timer or a workflow. Widgets are meant as mini, self-contained utilities that help you keep an eye on things right from the board, working in the background while you do something else.
 
-There are five widgets: [Clock](#clock), [Calendar](#calendar), [Countdown](#countdown), [Stopwatch](#stopwatch) and [Pomodoro](#pomodoro).
+There are six widgets: [Clock](#clock), [Calendar](#calendar), [Countdown](#countdown), [Stopwatch](#stopwatch), [Pomodoro](#pomodoro) and [Workflow](#workflow).
 
 ![Note widgets screenshot](Screenshot07.jpg)
 
@@ -444,7 +444,7 @@ To change a widget, open the note for editing: you'll see this text, and you can
 - **Several widgets in one note**, mixed with normal text, are fine: just write one block after the other.
 - **Clicking**: the buttons inside a widget (Start, Pause, the calendar arrows...) work without opening the note for editing, even if you chose to require a double click to edit. Clicking anywhere else on the widget works as on any other note.
 - **Language**: button labels, month and day names and messages follow the plugin's language. Dates use the form "Monday, October 05, 2026".
-- **Accent lines**: the Clock, Countdown, Stopwatch and Pomodoro widgets have a line above and below them, for a cleaner, more distinctive look (the Calendar has none). By default it is light blue and 3 pixels thick. In **Settings**, the **Widget accent lines** toggle (on by default) turns it on or off, and when it is on you can also choose the **line color** and the **line thickness**, from 1 to 8 pixels. Open boards update right away, while a widget shown in a regular Obsidian note picks up the change the next time it is drawn.
+- **Accent lines**: the Clock, Countdown, Stopwatch, Pomodoro and Workflow widgets have a line above and below them, for a cleaner, more distinctive look (the Calendar has none). By default it is light blue and 3 pixels thick. In **Settings**, the **Widget accent lines** toggle (on by default) turns it on or off, and when it is on you can also choose the **line color** and the **line thickness**, from 1 to 8 pixels. Open boards update right away, while a widget shown in a regular Obsidian note picks up the change the next time it is drawn.
 - **Light on resources**: a single shared timer updates every widget that is on screen. A widget that is not displayed (a closed or hidden note) costs nothing.
 - **Also outside the board**: while the plugin is enabled, a `QNBWidget` block is also drawn in your regular Obsidian notes.
 
@@ -579,6 +579,51 @@ label: Study
 - **The state is saved**: with an `id`, the timer survives closing the board and closing Obsidian (a running phase ends at its exact time). The state is saved only when you press a button or a phase ends.
 - **Without an `id`**, the state is kept only while Obsidian stays open, and two identical blocks share it. As for the stopwatch, give each pomodoro its own `id`, and change it by hand in a duplicated note.
 
+### Workflow
+
+A board of **phases** to follow things step by step: a **To assign** column on the left holds your cards, and the phases sit to its right. You decide, by dragging, which phase each card belongs to.
+
+**What it is for**: whenever you have a set of items that must go through stages. For example, a list of users to be trained that moves from *To assign* to *Regulations course*, *Operational course*, *Done*; the steps of a project (*To do → In progress → Done*); the chapters of a document to review; the people of a team shared among activities. You prepare all the cards first in **To assign**, then drag them one by one into the right phase, and at any time the titles tell you how many cards each phase holds.
+
+Created from the New note window, it looks like this in the note's text (you normally never need to touch it):
+
+````
+```QNBWidget
+type: workflow
+id: wf-a1b2c3
+pool: To assign
+width: medium
+phase: To do | #b2f2bb
+phase: In progress | #a5d8ff
+phase: Done | #ffd8a8
+card: Prepare the report | #ffec99 | 0
+card: Call the supplier | #a5d8ff | 2
+```
+````
+
+| Line | What it means |
+|---|---|
+| `pool` | The name of the first column (To assign). |
+| `width` | `narrow`, `medium` or `wide`: the width of the columns. |
+| `phase` | One per phase: its name and its color, separated by a vertical bar. The order of the lines is the order on screen. |
+| `card` | One per card: its text, its color and the phase it is in (`0` = To assign, `1` = the first phase, `2` = the second, and so on). The order of the lines is the order inside each column. |
+
+The widget writes these lines by itself every time you change something; you can also edit them by hand, for example to prepare many cards at once.
+
+- **Creating it**: from the **Widget** toggle of the New note window, choose **Workflow**. It starts with an empty To assign column and three phases (To do, In progress, Done).
+- **Cards**: **+ Card** (under To assign) adds one, ready to type. Double-click a card to edit its text (Enter confirms, Shift+Enter starts a new line, Esc cancels). Cards fit the width of the column.
+- **Moving**: drag a card into any phase, back to To assign, or between two cards to put it in that position. While you drag, the column under the card is highlighted.
+- **Selecting several cards**: hold **Ctrl** (**Cmd** on Mac) and click to add or remove cards from the selection; hold **Shift** and click to select all the cards between the last one you clicked and this one, in the same phase. Selected cards get a colored outline. A plain click on a card, a click on an empty spot or **Esc** clears the selection.
+- **Moving or changing many at once**: drag any selected card and all the selected ones move together, even if they come from different phases, keeping their order; you see **all** the cards you are carrying under the cursor, one below the other, in the order they will arrive, with their own colors and text and a badge with the total. If there are too many to fit the screen they are shown on two columns, and the last ones, if still too many, are summed up as "+N". The originals stay in place, dimmed, until you drop them. If you drag a card that is not selected, only that card moves. When cards are selected, a panel appears on the right with their count and three buttons: **Color** (the same color for all of them), **Delete selected** (it asks **Sure?** first) and **Deselect**.
+- **Same height**: all columns, To assign included, are as tall as would be needed to hold all the cards together, so they do not change size while you move cards around.
+- **Phases**: click a title to rename it; the number in brackets is how many cards it holds. On the phase header (shown more clearly when you point at it) you find the palette button for its color and ✕ to delete it. **+ Phase** adds one at the end. Deleting a phase does not lose its cards: they go back to To assign.
+- **Moving a phase**: grab the whole phase and drag it left or right; you see a preview with its title and first cards; a bar shows where it will land, and it takes all its cards with it. To assign always stays first.
+- **Colors**: the palette button of a card or a phase opens a small panel: first the **last colors you used** (the most recent first, shared with the table editor), then a set of soft colors, and **Other color** for any color you like. The text color adapts to stay readable.
+- **Deleting**: ✕ asks **Sure?** first; press it again within three seconds to confirm.
+- **Width**: the **↔** button cycles the columns between narrow, medium and wide. If there are many phases, the widget scrolls sideways.
+- **Saved in the note**: every change is written into the note itself, so it is kept with it, copied with it and visible in the note's text. If you **duplicate** the note, the copy is an independent Workflow. If a card has a line break or a `|` in its text, the widget takes care of writing it correctly.
+- **Where it works**: on the board. In a regular Obsidian note the Workflow is shown, but changes made there are not saved.
+
 ### Good to know
 
 - The state of stopwatches and pomodoros with an `id` is saved in the plugin's `data.json`. Deleting a widget note leaves its small saved state behind, which is harmless.
@@ -601,6 +646,8 @@ Clicking a note brings it into view on the board, highlighted — even if it was
 ![Board Structure diagram screenshot](Screenshot05.jpg)
 
 The toolbar's "Board structure" button opens a resizable, read-only flowchart: a box per category (full color) with its groups and subgroups branching below it (progressively lighter shades of the same color, so you can tell the depth apart at a glance), connected by lines — no notes shown, just the organizational skeleton, for getting your bearings when you have many categories and groups. Nothing is clickable; it's purely informational.
+
+When you have many categories the diagram gets very wide. The **Category** drop-down, on the left under the title, lets you choose which category to draw, so you see only the tree you care about, without scrolling sideways. The window starts from the first category and remembers your choice until you close Obsidian; the drop-down appears only if there is more than one category.
 
 ---
 
@@ -713,6 +760,16 @@ If [data compression](#data-file-compression) is enabled, the file instead start
 ---
 
 ## Version history
+
+### 1.1.9
+
+- New: a new widget, **Workflow**, to follow things through phases. On the left there is a **To assign** column with your cards; to its right, the phases (by default To do, In progress, Done). Drag a card into a phase to place it, drag it back or onto another phase to move it, and drop it between two cards to choose its position. All columns always have the same height, enough to hold all the cards, and each title shows how many cards it holds. Click a title to rename it; double-click a card to edit its text; the palette button sets the color of a card or a phase; **+ Card** and **+ Phase** add new ones; drag a phase to move it with its cards; the ✕ button (it asks "Sure?" first) deletes a card or a phase, and the cards of a deleted phase go back to To assign. The **↔** button changes the column width. Everything is saved in the note itself. Create it from the **Widget** toggle of the New note window.
+- Fixed: in the goal celebration, the outline of the **Congratulations** button no longer flickers while the fireworks play.
+- Fixed: in the Workflow color panel the color circles were shown grey with some themes; they now always show their color, and the last colors you used are remembered and offered first.
+- New: in the **Board structure** window, a **Category** drop-down lets you show one category at a time, so the diagram is less spread out.
+- New: in the **Workflow** you can select several cards (**Ctrl** or **Shift** and click) and drag them together to another phase, or change their color or delete them all at once.
+- Improved: when you drag several selected cards in the **Workflow**, you now see all of them under the cursor, one below the other, with a badge showing how many there are.
+- Fixed: when you drag a whole phase in the **Workflow**, the preview now shows the full phase (title and first cards) instead of a cut-off piece of the column.
 
 ### 1.1.8
 
